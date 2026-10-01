@@ -70,8 +70,8 @@ const MONTHS: Record<string, string> = {
   '12': 'Desember'
 };
 
-const PHOTO_BATCH_SIZE = 20;
-const PHOTO_CONCURRENCY = 3;
+const PHOTO_BATCH_SIZE = 10;
+const PHOTO_CONCURRENCY = 1;
 
 const TABLE_WIDTH = 16000;
 
