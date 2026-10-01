@@ -176,7 +176,6 @@ async function handleRequest(request: Request) {
       );
     }
   }
-}
 
 export async function POST(request: Request) {
   return handleRequest(request);
