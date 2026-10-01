@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { connect } from '@tidbcloud/serverless';
 
 const ALLOWED_ORIGINS = new Set(
@@ -10,9 +12,10 @@ const ALLOWED_ORIGINS = new Set(
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get('Origin') || '';
 
-  const allowedOrigin = ALLOWED_ORIGINS.has(origin)
-    ? origin
-    : 'https://yohandeku32.github.io';
+  const allowedOrigin =
+    ALLOWED_ORIGINS.has('*') || ALLOWED_ORIGINS.has(origin)
+      ? (ALLOWED_ORIGINS.has('*') ? '*' : origin)
+      : '*';
 
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
