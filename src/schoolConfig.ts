@@ -11,4 +11,4 @@ export const SCHOOL_CONFIG = {
 // Isi dengan URL deployment Vercel untuk sekolah ini sebelum build/deploy.
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  'https://sdgoekona.vercel.app';
+  'https://sdgoekona-one.vercel.app';
