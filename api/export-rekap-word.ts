@@ -79,7 +79,7 @@ async function handleExport(request: Request) {
   
   const dates=workDates(Number(tahun),Number(bulan));const dateSet=new Set(dates);const by=new Map<string,AttendanceRow[]>();for(const a of att){if(!dateSet.has(a.tanggal))continue;if(!by.has(a.id_user))by.set(a.id_user,[]);by.get(a.id_user)!.push(a);}const late=mins(BATAS_TERLAMBAT)||0;const recap=guru.map(g=>{const rec=by.get(g.id_user)||[];const day=new Map<string,string>();const lateDates=new Set<string>();for(const a of rec){const c=category(a.keterangan);day.set(a.tanggal,c);if(c==='hadir'){const m=mins(a.jam_masuk);if(m!==null&&m>late)lateDates.add(a.tanggal);}}let hadir=0,ijin=0,sakit=0,dinasLuar=0,tanpa=0;for(const c of day.values()){if(c==='hadir')hadir++;if(c==='ijin')ijin++;if(c==='sakit')sakit++;if(c==='dinas')dinasLuar++;if(c==='tanpa')tanpa++;}const tanpaAuto=Math.max(0,dates.length-(hadir+ijin+sakit+dinasLuar+tanpa));tanpa+=tanpaAuto;return{id_user:g.id_user,nama:g.nama,nipNik:g.nip||g.nik||g.id_user||'-',golongan:g.golongan_ruang||'-',jabatan:g.jabatan||'-',statusKepegawaian:g.status_kepegawaian||'-',jumlahHariKerja:dates.length,tanpaBerita:tanpa,ijin,sakit,dinasLuar,jumlahTidakHadir:tanpa+ijin+sakit+dinasLuar,terlambat:lateDates.size,jumlahHariHadir:hadir};});
   
-  const bytes=buildDocx(recap,bulan,tahun);
+  const bytes=await buildDocx(recap,bulan,tahun);
   return fileResponse(bytes,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',`Rekap_Absensi_${MONTHS[bulan]||bulan}_${tahun}.docx`);
  } catch(error) {
   console.error('EXPORT REKAP WORD ERROR:', error);
