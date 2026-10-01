@@ -112,7 +112,6 @@ async function handleRequest(request: Request) {
       );
     }
   }
-}
 
 export async function GET(request: Request) {
   return handleRequest(request);
