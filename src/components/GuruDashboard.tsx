@@ -9,6 +9,7 @@ import {
   Camera,
   Sparkles,
   LayoutGrid,
+  GraduationCap,
   ChevronRight
 } from 'lucide-react';
 
@@ -159,40 +160,6 @@ export default function GuruDashboard({
     Number(Boolean(dataMasuk)) +
     Number(Boolean(dataPulang));
 
-  const initials =
-    useMemo(() => {
-      const clean =
-        String(
-          user.name || ''
-        )
-          .replace(
-            /[^a-zA-ZÀ-ÿ0-9 ]/g,
-            ' '
-          )
-          .trim();
-
-      if (!clean) {
-        return 'G';
-      }
-
-      const parts =
-        clean
-          .split(
-            /\s+/
-          )
-          .filter(Boolean);
-
-      if (parts.length === 1) {
-        return parts[0]
-          .slice(0, 2)
-          .toUpperCase();
-      }
-
-      return (
-        parts[0][0] +
-        parts[parts.length - 1][0]
-      ).toUpperCase();
-    }, [user.name]);
 
   const roleLabel =
     user.role === 'kepsek'
@@ -251,8 +218,8 @@ export default function GuruDashboard({
               </div>
             </div>
 
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.3rem] bg-gradient-to-br from-blue-600 to-blue-800 text-sm font-black text-white shadow-lg shadow-blue-600/20 ring-4 ring-blue-50">
-              {initials}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.3rem] bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-lg shadow-blue-600/20 ring-4 ring-blue-50">
+              <GraduationCap className="h-7 w-7" strokeWidth={2.2} />
             </div>
           </section>
 
