@@ -1622,6 +1622,64 @@ async function hapusFotoDrive(
   }
 }
 
+const ABSENSI_APPS_SCRIPT_URL_ENV_NAME = 'APPS_SCRIPT_URL';
+
+function getAppsScriptUrlCandidates(rawUrl: string) {
+  const original = String(rawUrl || '').trim();
+
+  if (!original) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+
+  const addCandidate = (value: string) => {
+    const normalized = String(value || '').trim();
+
+    if (!normalized || candidates.includes(normalized)) {
+      return;
+    }
+
+    candidates.push(normalized);
+  };
+
+  addCandidate(original);
+
+  try {
+    const parsed = new URL(original);
+
+    // Web App Google Apps Script harus memakai endpoint /exec.
+    // Jika Vercel tidak sengaja menyimpan URL /dev atau URL tanpa /exec,
+    // ubah otomatis ke deployment production yang sama.
+    if (
+      parsed.hostname === 'script.google.com' &&
+      parsed.pathname.startsWith('/macros/s/')
+    ) {
+      const deploymentPath = parsed.pathname.match(
+        /^\/macros\/s\/([^/]+)(?:\/(?:exec|dev)?)?\/?$/
+      );
+
+      if (deploymentPath?.[1]) {
+        const execUrl = new URL(
+          '/macros/s/' + deploymentPath[1] + '/exec'
+        );
+
+        addCandidate(execUrl.toString());
+      } else if (parsed.pathname.endsWith('/dev')) {
+        parsed.pathname = parsed.pathname.replace(/\/dev\/?$/, '/exec');
+        addCandidate(parsed.toString());
+      } else if (!parsed.pathname.endsWith('/exec')) {
+        parsed.pathname = parsed.pathname.replace(/\/$/, '') + '/exec';
+        addCandidate(parsed.toString());
+      }
+    }
+  } catch {
+    // Biarkan fetch menggunakan URL asli agar error tetap terbaca di log.
+  }
+
+  return candidates;
+}
+
 // ======================================================
 // UPLOAD FOTO KE GOOGLE APPS SCRIPT
 // ======================================================
@@ -1682,7 +1740,6 @@ async function uploadFotoNow(
   appsScriptUrl: string,
 
   data: {
-
     id_user:
       string;
 
@@ -1699,23 +1756,36 @@ async function uploadFotoNow(
       string;
   }
 ) {
+  const candidates = getAppsScriptUrlCandidates(appsScriptUrl);
 
-  const controller =
-    new AbortController();
+  if (candidates.length === 0) {
+    return {
+      status: 'error',
+      message:
+        ABSENSI_APPS_SCRIPT_URL_ENV_NAME +
+        ' belum berisi URL Web App Google Apps Script.'
+    };
+  }
 
-  const timeoutId =
-    setTimeout(() => {
+  let lastErrorMessage = '';
+
+  for (const candidateUrl of candidates) {
+    const controller = new AbortController();
+
+    const timeoutId = setTimeout(() => {
       controller.abort();
     }, 90000);
 
-  try {
+    try {
+      console.log(
+        'UPLOAD FOTO KE APPS SCRIPT:',
+        candidateUrl
+      );
 
-    const response =
-      await fetch(
-        appsScriptUrl,
+      const response = await fetch(
+        candidateUrl,
         {
-          method:
-            'POST',
+          method: 'POST',
 
           headers: {
             'Content-Type':
@@ -1748,121 +1818,121 @@ async function uploadFotoNow(
         }
       );
 
-    const responseText =
-      await response.text();
+      const responseText =
+        await response.text();
 
-    let result: any;
+      let result: any = null;
 
-    try {
-
-      result =
-        JSON.parse(
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        const preview =
           responseText
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 300);
+
+        console.error(
+          'RESPONSE APPS SCRIPT TIDAK JSON:',
+          {
+            url: candidateUrl,
+            status: response.status,
+            preview
+          }
         );
 
-    } catch {
+        lastErrorMessage =
+          response.status === 404
+            ? 'Endpoint Google Apps Script mengembalikan HTTP 404. Pastikan URL APPS_SCRIPT_URL adalah URL Web App production yang berakhir dengan /exec dan deployment masih aktif.'
+            : `Apps Script HTTP ${response.status}: response tidak valid.`;
 
+        // Coba kandidat URL berikutnya bila ada.
+        continue;
+      }
+
+      if (!response.ok) {
+        lastErrorMessage =
+          result?.message ||
+          `Apps Script gagal memproses upload (HTTP ${response.status}).`;
+
+        console.error(
+          'APPS SCRIPT HTTP ERROR:',
+          {
+            url: candidateUrl,
+            status: response.status,
+            result
+          }
+        );
+
+        continue;
+      }
+
+      if (
+        !result ||
+        result.status !== 'success' ||
+        !result.file_id
+      ) {
+        lastErrorMessage =
+          result?.message ||
+          'Google Drive belum mengembalikan file ID foto.';
+
+        console.error(
+          'APPS SCRIPT RESPONSE TIDAK SESUAI:',
+          {
+            url: candidateUrl,
+            result
+          }
+        );
+
+        continue;
+      }
+
+      /*
+       * Beri waktu singkat agar file Google Drive
+       * selesai dipropagasikan sebelum file ID disimpan
+       * dan dibaca kembali oleh dashboard.
+       */
+      await new Promise<void>((resolve) => {
+        setTimeout(
+          resolve,
+          1200
+        );
+      });
+
+      return result;
+    } catch (error) {
       console.error(
-        'RESPONSE APPS SCRIPT:',
-        responseText
+        'UPLOAD FOTO KE APPS SCRIPT ERROR:',
+        {
+          url: candidateUrl,
+          error
+        }
       );
 
-      return {
-        status:
-          'error',
-
-        message:
-          response.ok
-            ? 'Response Apps Script bukan JSON.'
-            : `Apps Script HTTP ${response.status}: response tidak valid.`,
-      };
+      if (
+        error instanceof DOMException &&
+        error.name === 'AbortError'
+      ) {
+        lastErrorMessage =
+          'Upload foto ke Google Drive terlalu lama dan dihentikan. Silakan coba lagi.';
+      } else {
+        lastErrorMessage =
+          error instanceof Error
+            ? error.message
+            : String(error);
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    if (!response.ok) {
-
-      return {
-        status:
-          'error',
-
-        message:
-          result?.message ||
-          `Apps Script gagal memproses upload (HTTP ${response.status}).`,
-      };
-    }
-
-    if (
-      !result ||
-      result.status !==
-        'success' ||
-      !result.file_id
-    ) {
-
-      return {
-        status:
-          'error',
-
-        message:
-          result?.message ||
-          'Google Drive belum mengembalikan file ID foto.',
-      };
-    }
-
-    /*
-     * Beri waktu singkat agar file Google Drive
-     * selesai dipropagasikan sebelum file ID disimpan
-     * dan dibaca kembali oleh dashboard.
-     */
-    await new Promise<void>((resolve) => {
-      setTimeout(
-        resolve,
-        1200
-      );
-    });
-
-    return result;
-
-  } catch (error) {
-
-    console.error(
-      'UPLOAD FOTO ERROR:',
-      error
-    );
-
-    if (
-      error instanceof DOMException &&
-      error.name === 'AbortError'
-    ) {
-
-      return {
-        status:
-          'error',
-
-        message:
-          'Upload foto ke Google Drive terlalu lama dan dihentikan. Silakan coba lagi.',
-      };
-    }
-
-    return {
-
-      status:
-        'error',
-
-      message:
-        error instanceof Error
-
-          ? error.message
-
-          : String(error),
-    };
-
-  } finally {
-
-    clearTimeout(
-      timeoutId
-    );
   }
-}
 
+  return {
+    status: 'error',
+    message:
+      lastErrorMessage ||
+      'Google Apps Script tidak dapat memproses upload foto.'
+  };
+}
 
 // ======================================================
 // FORMAT TIME TIDB MENJADI HH:MM
