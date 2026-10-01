@@ -1206,7 +1206,7 @@ export default function AdminPanel({
     const timeoutId =
       window.setTimeout(() => {
         controller.abort();
-      }, 20000);
+      }, 180000);
 
     try {
       const response = await fetch(url, {
