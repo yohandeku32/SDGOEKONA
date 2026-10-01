@@ -36,8 +36,7 @@ function json(
   });
 }
 
-export default {
-  async fetch(request: Request) {
+async function handleRequest(request: Request) {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -112,5 +111,13 @@ export default {
         500
       );
     }
-  },
-};
+  }
+}
+
+export async function GET(request: Request) {
+  return handleRequest(request);
+}
+
+export async function OPTIONS(request: Request) {
+  return handleRequest(request);
+}
