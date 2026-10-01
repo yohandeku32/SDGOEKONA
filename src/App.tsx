@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { User, AttendanceRecord, AbsenMode } from './types';
 
@@ -120,17 +120,48 @@ export default function App() {
   // =====================================================
   // AMBIL DATA ABSENSI DARI TIDB
   // =====================================================
-  const fetchDatabase = async () => {
-    setIsLoading(true);
-    setLoaderText('Sinkronisasi Database TiDB...');
+  const databaseFetchSequenceRef = useRef(0);
+  const uploadInFlightRef = useRef(false);
+  const lastUploadCompletedAtRef = useRef(0);
+
+  const MIN_UPLOAD_GAP_MS = 2500;
+  const DATABASE_FETCH_TIMEOUT_MS = 45000;
+  const UPLOAD_REQUEST_TIMEOUT_MS = 90000;
+
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+
+  const fetchDatabase = async (showLoader = true) => {
+    const requestId = ++databaseFetchSequenceRef.current;
+
+    if (showLoader) {
+      setIsLoading(true);
+      setLoaderText('Sinkronisasi Database TiDB...');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+    }, DATABASE_FETCH_TIMEOUT_MS);
 
     try {
       const res = await fetch(`${ABSENSI_API_URL}?t=${Date.now()}`, {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: controller.signal
       });
 
-      const data = await res.json();
+      const raw = await res.text();
+
+      let data: any;
+
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error('Response database bukan JSON yang valid.');
+      }
 
       if (!res.ok) {
         throw new Error(
@@ -138,17 +169,68 @@ export default function App() {
         );
       }
 
-      if (Array.isArray(data)) {
-        setGlobalDatabase(data);
-      } else {
-        console.warn('Data absensi bukan array:', data);
-        setGlobalDatabase([]);
+      // Hanya request GET terbaru yang boleh mengganti state.
+      // Ini mencegah response lama menimpa data upload terbaru.
+      if (requestId === databaseFetchSequenceRef.current) {
+        if (Array.isArray(data)) {
+          setGlobalDatabase(data);
+        } else {
+          console.warn('Data absensi bukan array:', data);
+        }
       }
     } catch (e) {
       console.error('Fetch database error:', e);
+      // Jangan kosongkan database ketika refresh gagal.
+      // Data yang sudah tampil tetap dipertahankan.
     } finally {
-      setIsLoading(false);
+      window.clearTimeout(timeoutId);
+
+      if (
+        showLoader &&
+        requestId === databaseFetchSequenceRef.current
+      ) {
+        setIsLoading(false);
+      }
     }
+  };
+
+  const mergeUploadedAttendance = (value: unknown) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+
+    const incoming = value as Partial<AttendanceRecord>;
+
+    if (!incoming.id_user || !incoming.date) {
+      return;
+    }
+
+    setGlobalDatabase((current) => {
+      const incomingKey =
+        `${String(incoming.id_user)}__${String(incoming.date)}`;
+
+      const index = current.findIndex(
+        (record) =>
+          `${String(record.id_user)}__${String(record.date)}` ===
+          incomingKey
+      );
+
+      if (index === -1) {
+        return [
+          ...current,
+          incoming as AttendanceRecord
+        ];
+      }
+
+      const next = [...current];
+
+      next[index] = {
+        ...next[index],
+        ...incoming
+      };
+
+      return next;
+    });
   };
 
   const handleLoginSuccess = (user: User) => {
@@ -183,10 +265,32 @@ export default function App() {
   const handleCapture = async (photoBase64: string) => {
     if (!currentUser || !currentMode) return;
 
+    // Cegah double-submit pada event klik yang sangat cepat.
+    if (uploadInFlightRef.current) {
+      return;
+    }
+
+    uploadInFlightRef.current = true;
+
     const modeYangDikirim = currentMode;
 
     setIsSubmitting(true);
-    setUploadProgress(15);
+    setUploadProgress(10);
+
+    // Google Drive / Apps Script kadang butuh waktu singkat
+    // untuk menyelesaikan upload foto sebelumnya.
+    // Jeda dibuat otomatis agar guru tidak perlu menunggu atau mencoba ulang.
+    const elapsedSinceLastUpload =
+      Date.now() - lastUploadCompletedAtRef.current;
+
+    if (
+      elapsedSinceLastUpload < MIN_UPLOAD_GAP_MS &&
+      lastUploadCompletedAtRef.current > 0
+    ) {
+      await sleep(
+        MIN_UPLOAD_GAP_MS - elapsedSinceLastUpload
+      );
+    }
 
     const now = new Date();
 
@@ -214,17 +318,39 @@ export default function App() {
     try {
       setUploadProgress(55);
 
-      const response = await fetch(ABSENSI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => {
+        controller.abort();
+      }, UPLOAD_REQUEST_TIMEOUT_MS);
+
+      let response: Response;
+
+      try {
+        response = await fetch(ABSENSI_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
 
       setUploadProgress(85);
 
-      const result = await response.json();
+      const raw = await response.text();
+
+      let result: any;
+
+      try {
+        result = JSON.parse(raw);
+      } catch {
+        throw new Error(
+          'Server absensi mengembalikan response yang tidak valid.'
+        );
+      }
 
       if (!response.ok || result.status === 'error') {
         alert(
@@ -238,9 +364,11 @@ export default function App() {
       }
 
       setUploadProgress(100);
+      lastUploadCompletedAtRef.current = Date.now();
 
-      // Sinkronkan data TiDB setelah berhasil
-      await fetchDatabase();
+      // Tampilkan hasil POST langsung di dashboard.
+      // Jadi UI tidak perlu menunggu GET selesai.
+      mergeUploadedAttendance(result?.data);
 
       setTimeout(() => {
         setIsSubmitting(false);
@@ -249,24 +377,39 @@ export default function App() {
         setSuccessMessage(`Absensi ${modeYangDikirim} Anda sukses direkam.`);
         setShowSuccessModal(true);
       }, 350);
+
+      // Sinkronisasi ulang dijalankan di belakang tanpa menutup UI.
+      // Beri sedikit waktu tambahan agar data Drive/DB sudah stabil.
+      window.setTimeout(() => {
+        void fetchDatabase(false);
+      }, 1200);
     } catch (err) {
       console.error(err);
 
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Server sedang terlalu lama merespons. Foto mungkin masih diproses. Silakan cek kembali beberapa saat lagi.'
+          : err instanceof Error
+            ? err.message
+            : 'Gagal mengirim data absensi. Pastikan internet stabil dan coba lagi.';
+
       alert(
-        'Gagal mengirim data absensi. Pastikan internet stabil dan coba lagi.'
+        `GAGAL MENGIRIM ABSEN: ${message}`
       );
 
       setIsSubmitting(false);
       setUploadProgress(0);
+    } finally {
+      uploadInFlightRef.current = false;
     }
   };
 
-  const handleCloseSuccessModal = async () => {
+  const handleCloseSuccessModal = () => {
     setShowSuccessModal(false);
     setSuccessMessage('');
 
-    // Refresh sekali lagi untuk memastikan UI sinkron
-    await fetchDatabase();
+    // Refresh di belakang layar; jangan blokir dashboard guru.
+    void fetchDatabase(false);
   };
 
   return (
