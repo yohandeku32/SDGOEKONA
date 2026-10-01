@@ -1200,13 +1200,22 @@ export default function AdminPanel({
   ) => {
     showLoader(loadingText);
 
+    const controller =
+      new AbortController();
+
+    const timeoutId =
+      window.setTimeout(() => {
+        controller.abort();
+      }, 20000);
+
     try {
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
         headers: {
           Accept: '*/*'
-        }
+        },
+        signal: controller.signal
       });
 
       const contentType = String(
@@ -1214,74 +1223,132 @@ export default function AdminPanel({
       ).toLowerCase();
 
       if (!response.ok) {
-        const message = await readExportError(response);
+        const message =
+          await readExportError(response);
+
         throw new Error(
-          message || `Server gagal membuat file (${response.status}).`
+          message ||
+            `Server gagal membuat file (${response.status}).`
         );
       }
 
       if (
-        contentType.includes('application/json') ||
-        contentType.includes('text/plain') ||
-        contentType.includes('text/html')
+        contentType.includes(
+          'application/json'
+        ) ||
+        contentType.includes(
+          'text/plain'
+        ) ||
+        contentType.includes(
+          'text/html'
+        )
       ) {
-        const message = await readExportError(response);
+        const message =
+          await readExportError(response);
+
         throw new Error(
-          message || 'Server tidak mengirim file export.'
+          message ||
+            'Server tidak mengirim file export.'
         );
       }
 
-      const blob = await response.blob();
+      const blob =
+        await response.blob();
 
       if (blob.size === 0) {
-        throw new Error('File export kosong.');
+        throw new Error(
+          'File export kosong.'
+        );
       }
 
-      let fileName = fallbackFileName;
-      const disposition =
-        response.headers.get('content-disposition') || '';
+      let fileName =
+        fallbackFileName;
 
-      const utf8Match = disposition.match(
-        /filename\*=UTF-8''([^;]+)/i
-      );
+      const disposition =
+        response.headers.get(
+          'content-disposition'
+        ) || '';
+
+      const utf8Match =
+        disposition.match(
+          /filename\*=UTF-8''([^;]+)/i
+        );
 
       const normalMatch =
-        disposition.match(/filename=\"([^\"]+)\"/i) ||
-        disposition.match(/filename=([^;]+)/i);
+        disposition.match(
+          /filename="([^"]+)"/i
+        ) ||
+        disposition.match(
+          /filename=([^;]+)/i
+        );
 
       if (utf8Match?.[1]) {
         try {
-          fileName = decodeURIComponent(utf8Match[1]);
+          fileName =
+            decodeURIComponent(
+              utf8Match[1]
+            );
         } catch {
-          fileName = utf8Match[1];
+          fileName =
+            utf8Match[1];
         }
-      } else if (normalMatch?.[1]) {
-        fileName = normalMatch[1].trim();
+      } else if (
+        normalMatch?.[1]
+      ) {
+        fileName =
+          normalMatch[1].trim();
       }
 
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
+      const objectUrl =
+        URL.createObjectURL(blob);
 
-      anchor.href = objectUrl;
-      anchor.download = fileName;
-      anchor.style.display = 'none';
+      const anchor =
+        document.createElement('a');
 
-      document.body.appendChild(anchor);
+      anchor.href =
+        objectUrl;
+
+      anchor.download =
+        fileName;
+
+      anchor.style.display =
+        'none';
+
+      document.body.appendChild(
+        anchor
+      );
+
       anchor.click();
       anchor.remove();
 
       window.setTimeout(() => {
-        URL.revokeObjectURL(objectUrl);
+        URL.revokeObjectURL(
+          objectUrl
+        );
       }, 1500);
     } catch (error) {
-      showAdminMessage(
-        'Export Gagal',
-        error instanceof Error
-          ? error.message
-          : 'File export gagal dibuat.',
-        'error'
-      );
+      if (
+        error instanceof DOMException &&
+        error.name === 'AbortError'
+      ) {
+        showAdminMessage(
+          'Export Timeout',
+          'Server terlalu lama membuat file Excel. Silakan coba lagi. Bila tetap berhenti di proses sinkronisasi, kirim log Vercel terbaru dari /api/export-excel.',
+          'error'
+        );
+      } else {
+        showAdminMessage(
+          'Export Gagal',
+          error instanceof Error
+            ? error.message
+            : 'File export gagal dibuat.',
+          'error'
+        );
+      }
     } finally {
+      window.clearTimeout(
+        timeoutId
+      );
       hideLoader();
     }
   };
