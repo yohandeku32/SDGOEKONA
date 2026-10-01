@@ -1,5 +1,5 @@
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 import { connect } from '@tidbcloud/serverless';
 
@@ -22,6 +22,21 @@ type RowData = {
   jabatan?: string | null;
 };
 
+type PhotoData = {
+  file_id: string;
+  base64: string;
+  mime_type: string;
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  extension: 'jpg' | 'png';
+};
+
+type ImageRelation = {
+  id: string;
+  target: string;
+};
+
 const MONTHS: Record<string, string> = {
   '01': 'Januari',
   '02': 'Februari',
@@ -37,243 +52,68 @@ const MONTHS: Record<string, string> = {
   '12': 'Desember',
 };
 
-function xmlEscape(value: unknown) {
+const PHOTO_BATCH_SIZE = 25;
+const MAX_IMAGE_WIDTH_EMU = 900000;
+const MAX_IMAGE_HEIGHT_EMU = 900000;
+
+function headers() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Cache-Control': 'no-store',
+  };
+}
+
+function jsonResponse(
+  data: unknown,
+  status = 200
+) {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        ...headers(),
+        'Content-Type':
+          'application/json; charset=utf-8',
+      },
+    }
+  );
+}
+
+function driveUrl(
+  fileId?: string | null
+) {
+  return fileId
+    ? `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`
+    : '';
+}
+
+function safeFileName(
+  value: string
+) {
+  return String(value || 'file')
+    .replace(
+      /[\\/:*?"<>|]/g,
+      '-'
+    )
+    .replace(
+      /\s+/g,
+      '_'
+    )
+    .trim();
+}
+
+function xmlEscape(
+  value: unknown
+) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-function xmlText(value: unknown) {
-  const text = String(value ?? '');
-  return xmlEscape(text).replace(/\r?\n/g, '</w:t></w:r></w:p><w:p><w:r><w:t xml:space="preserve">');
-}
-
-function run(
-  value: unknown,
-  options?: {
-    bold?: boolean;
-    size?: number;
-    color?: string;
-  }
-) {
-  const bold = options?.bold ? '<w:b/>' : '';
-  const size = options?.size ?? 18;
-  const color = options?.color
-    ? `<w:color w:val="${options.color}"/>`
-    : '';
-
-  return `<w:r>
-    <w:rPr>
-      <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
-      ${bold}
-      <w:sz w:val="${size}"/>
-      <w:szCs w:val="${size}"/>
-      ${color}
-    </w:rPr>
-    <w:t xml:space="preserve">${xmlEscape(value)}</w:t>
-  </w:r>`;
-}
-
-function paragraph(
-  value: unknown,
-  options?: {
-    bold?: boolean;
-    size?: number;
-    center?: boolean;
-    align?: 'left' | 'center' | 'right';
-    before?: number;
-    after?: number;
-    keepNext?: boolean;
-  }
-) {
-  const alignment =
-    options?.align ||
-    (options?.center ? 'center' : 'left');
-
-  return `<w:p>
-    <w:pPr>
-      <w:jc w:val="${alignment}"/>
-      <w:spacing
-        w:before="${options?.before ?? 0}"
-        w:after="${options?.after ?? 0}"
-      />
-      ${options?.keepNext ? '<w:keepNext/>' : ''}
-    </w:pPr>
-    ${run(value, {
-      bold: options?.bold,
-      size: options?.size ?? 18
-    })}
-  </w:p>`;
-}
-
-function identityParagraph(
-  label: string,
-  value: unknown
-) {
-  return `<w:p>
-    <w:pPr>
-      <w:spacing w:before="0" w:after="0"/>
-    </w:pPr>
-    ${run(label + ' : ', {
-      bold: true,
-      size: 17
-    })}
-    ${run(value || '-', {
-      size: 17
-    })}
-  </w:p>`;
-}
-
-function tableCell(
-  content: string,
-  width: number,
-  options?: {
-    bold?: boolean;
-    center?: boolean;
-    shading?: string;
-    vertical?: 'top' | 'center' | 'bottom';
-    vMerge?: 'restart' | 'continue';
-  }
-) {
-  const shading = options?.shading
-    ? `<w:shd w:fill="${options.shading}"/>`
-    : '';
-
-  const vertical =
-    options?.vertical ?? 'center';
-
-  const vMerge =
-    options?.vMerge
-      ? `<w:vMerge w:val="${options.vMerge}"/>`
-      : '';
-
-  return `<w:tc>
-    <w:tcPr>
-      <w:tcW w:w="${width}" w:type="dxa"/>
-      <w:vAlign w:val="${vertical}"/>
-      ${vMerge}
-      ${shading}
-      <w:tcMar>
-        <w:top w:w="75" w:type="dxa"/>
-        <w:bottom w:w="75" w:type="dxa"/>
-        <w:left w:w="70" w:type="dxa"/>
-        <w:right w:w="70" w:type="dxa"/>
-      </w:tcMar>
-      <w:tcBorders>
-        <w:top w:val="single" w:sz="5" w:color="B7C0C8"/>
-        <w:left w:val="single" w:sz="5" w:color="B7C0C8"/>
-        <w:bottom w:val="single" w:sz="5" w:color="B7C0C8"/>
-        <w:right w:val="single" w:sz="5" w:color="B7C0C8"/>
-      </w:tcBorders>
-    </w:tcPr>
-    ${content}
-  </w:tc>`;
-}
-
-function cellText(
-  value: unknown,
-  options?: {
-    bold?: boolean;
-    center?: boolean;
-    size?: number;
-    color?: string;
-  }
-) {
-  return paragraph(
-    value,
-    {
-      bold: options?.bold,
-      size: options?.size ?? 17,
-      center: options?.center ?? true
-    }
-  ).replace(
-    '</w:pPr>',
-    options?.color
-      ? `</w:pPr>${run('', { color: options.color })}`
-      : '</w:pPr>'
-  ).replace(
-    options?.color
-      ? `</w:pPr>${run('', { color: options.color })}`
-      : '</w:pPr>',
-    ''
-  );
-}
-
-function hyperlink(
-  text: string,
-  relationshipId: string
-) {
-  return `<w:hyperlink r:id="${relationshipId}">
-    <w:r>
-      <w:rPr>
-        <w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>
-        <w:color w:val="0563C1"/>
-        <w:u w:val="single"/>
-        <w:sz w:val="17"/>
-        <w:szCs w:val="17"/>
-      </w:rPr>
-      <w:t xml:space="preserve">${xmlEscape(text)}</w:t>
-    </w:r>
-  </w:hyperlink>`;
-}
-
-function imageLinkCell(
-  fileId: string | null | undefined,
-  relationshipId: string | null,
-  width: number,
-  shading?: string
-) {
-  let content = '';
-
-  if (
-    fileId &&
-    relationshipId
-  ) {
-    content = `<w:p>
-      <w:pPr>
-        <w:jc w:val="center"/>
-        <w:spacing w:before="0" w:after="0"/>
-      </w:pPr>
-      ${hyperlink(
-        'Lihat Foto',
-        relationshipId
-      )}
-    </w:p>`;
-  } else {
-    content = paragraph(
-      '-',
-      {
-        center: true,
-        size: 17
-      }
-    );
-  }
-
-  return tableCell(
-    content,
-    width,
-    {
-      center: true,
-      shading
-    }
-  );
-}
-
-function rowXml(
-  cells: string[],
-  height = 500,
-  repeatHeader = false
-) {
-  return `<w:tr>
-    <w:trPr>
-      <w:trHeight w:val="${height}" w:hRule="atLeast"/>
-      ${repeatHeader ? '<w:tblHeader/>' : ''}
-    </w:trPr>
-    ${cells.join('')}
-  </w:tr>`;
 }
 
 function normalizeJam(
@@ -319,7 +159,7 @@ function normalizeJam(
 
   return {
     masuk: masuk || '-',
-    pulang: pulang || '-'
+    pulang: pulang || '-',
   };
 }
 
@@ -330,34 +170,852 @@ function formatDate(
     String(value || '')
       .split('-');
 
-  if (parts.length === 3) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
-  }
-
-  return String(value || '-');
+  return parts.length === 3
+    ? `${parts[2]}-${parts[1]}-${parts[0]}`
+    : String(value || '-');
 }
 
-function driveUrl(
-  fileId?: string | null
-) {
-  return fileId
-    ? `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`
-    : '';
-}
-
-function safeFileName(
+function base64ToBytes(
   value: string
 ) {
-  return String(value || 'file')
-    .replace(
-      /[\\/:*?"<>|]/g,
-      '-'
+  const clean =
+    value.includes(',')
+      ? value.substring(
+          value.indexOf(',') + 1
+        )
+      : value;
+
+  const binary =
+    atob(clean);
+
+  const bytes =
+    new Uint8Array(
+      binary.length
+    );
+
+  for (
+    let i = 0;
+    i < binary.length;
+    i++
+  ) {
+    bytes[i] =
+      binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
+function readUint32(
+  bytes: Uint8Array,
+  offset: number
+) {
+  return (
+    (((bytes[offset] || 0) << 24) >>> 0) +
+    ((bytes[offset + 1] || 0) << 16) +
+    ((bytes[offset + 2] || 0) << 8) +
+    (bytes[offset + 3] || 0)
+  );
+}
+
+function getImageDimensions(
+  bytes: Uint8Array,
+  mimeType: string
+) {
+  const mime =
+    mimeType.toLowerCase();
+
+  // PNG
+  if (
+    mime.includes('png') &&
+    bytes.length >= 24 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return {
+      width:
+        readUint32(bytes, 16),
+      height:
+        readUint32(bytes, 20),
+    };
+  }
+
+  // JPEG / JPG
+  if (
+    (mime.includes('jpeg') ||
+      mime.includes('jpg')) &&
+    bytes.length >= 4 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8
+  ) {
+    let offset = 2;
+
+    while (
+      offset + 9 <
+      bytes.length
+    ) {
+      if (
+        bytes[offset] !== 0xff
+      ) {
+        offset++;
+        continue;
+      }
+
+      while (
+        offset < bytes.length &&
+        bytes[offset] === 0xff
+      ) {
+        offset++;
+      }
+
+      if (
+        offset >= bytes.length
+      ) {
+        break;
+      }
+
+      const marker =
+        bytes[offset++];
+
+      // Standalone JPEG markers.
+      if (
+        marker === 0xd8 ||
+        marker === 0xd9 ||
+        (marker >= 0xd0 &&
+          marker <= 0xd7)
+      ) {
+        continue;
+      }
+
+      if (
+        offset + 1 >=
+        bytes.length
+      ) {
+        break;
+      }
+
+      const segmentLength =
+        (bytes[offset] << 8) |
+        bytes[offset + 1];
+
+      if (
+        segmentLength < 2 ||
+        offset +
+          segmentLength >
+          bytes.length
+      ) {
+        break;
+      }
+
+      const isSizeMarker =
+        (marker >= 0xc0 &&
+          marker <= 0xc3) ||
+        (marker >= 0xc5 &&
+          marker <= 0xc7) ||
+        (marker >= 0xc9 &&
+          marker <= 0xcb) ||
+        (marker >= 0xcd &&
+          marker <= 0xcf);
+
+      if (
+        isSizeMarker &&
+        offset + 7 <
+          bytes.length
+      ) {
+        return {
+          height:
+            (bytes[offset + 3] << 8) |
+            bytes[offset + 4],
+          width:
+            (bytes[offset + 5] << 8) |
+            bytes[offset + 6],
+        };
+      }
+
+      offset +=
+        segmentLength;
+    }
+  }
+
+  return {
+    width: 4,
+    height: 3,
+  };
+}
+
+function normalizeMime(
+  mimeType: string
+) {
+  const mime =
+    mimeType.toLowerCase();
+
+  if (
+    mime.includes('png')
+  ) {
+    return 'image/png';
+  }
+
+  if (
+    mime.includes('jpeg') ||
+    mime.includes('jpg')
+  ) {
+    return 'image/jpeg';
+  }
+
+  return '';
+}
+
+async function fetchPhotos(
+  fileIds: string[]
+) {
+  const appsScriptUrl =
+    process.env.APPS_SCRIPT_URL;
+
+  const result =
+    new Map<
+      string,
+      PhotoData
+    >();
+
+  if (
+    !appsScriptUrl ||
+    fileIds.length === 0
+  ) {
+    return result;
+  }
+
+  const uniqueIds =
+    Array.from(
+      new Set(
+        fileIds
+          .map((id) =>
+            String(
+              id || ''
+            ).trim()
+          )
+          .filter(Boolean)
+      )
+    );
+
+  for (
+    let start = 0;
+    start < uniqueIds.length;
+    start += PHOTO_BATCH_SIZE
+  ) {
+    const batch =
+      uniqueIds.slice(
+        start,
+        start + PHOTO_BATCH_SIZE
+      );
+
+    try {
+      const response =
+        await fetch(
+          appsScriptUrl,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+              action:
+                'get_photos_base64',
+              file_ids:
+                batch,
+            }),
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+        console.error(
+          'WORD PHOTO HTTP ERROR:',
+          response.status,
+          responseText
+        );
+        continue;
+      }
+
+      let payload: any;
+
+      try {
+        payload =
+          JSON.parse(
+            responseText
+          );
+      } catch {
+        console.error(
+          'WORD PHOTO INVALID JSON:',
+          responseText
+        );
+        continue;
+      }
+
+      if (
+        payload?.status !==
+        'success'
+      ) {
+        console.error(
+          'WORD PHOTO APPS SCRIPT ERROR:',
+          payload?.message ||
+            'Unknown error'
+        );
+        continue;
+      }
+
+      const photos =
+        Array.isArray(
+          payload?.photos
+        )
+          ? payload.photos
+          : [];
+
+      for (
+        const item of photos
+      ) {
+        const fileId =
+          String(
+            item?.file_id ||
+              ''
+          ).trim();
+
+        const base64 =
+          String(
+            item?.base64 ||
+              ''
+          ).trim();
+
+        const rawMime =
+          String(
+            item?.mime_type ||
+              ''
+          ).trim();
+
+        const mimeType =
+          normalizeMime(
+            rawMime
+          );
+
+        if (
+          !fileId ||
+          !base64 ||
+          !mimeType
+        ) {
+          continue;
+        }
+
+        try {
+          const bytes =
+            base64ToBytes(
+              base64
+            );
+
+          const dimensions =
+            getImageDimensions(
+              bytes,
+              mimeType
+            );
+
+          result.set(
+            fileId,
+            {
+              file_id:
+                fileId,
+              base64,
+              mime_type:
+                mimeType,
+              bytes,
+              width:
+                Math.max(
+                  1,
+                  dimensions.width
+                ),
+              height:
+                Math.max(
+                  1,
+                  dimensions.height
+                ),
+              extension:
+                mimeType ===
+                'image/png'
+                  ? 'png'
+                  : 'jpg',
+            }
+          );
+        } catch (error) {
+          console.error(
+            'WORD PHOTO DECODE ERROR:',
+            fileId,
+            error
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        'WORD PHOTO FETCH ERROR:',
+        error
+      );
+    }
+  }
+
+  return result;
+}
+
+function imageSizeEmu(
+  photo: PhotoData
+) {
+  const aspect =
+    photo.width /
+    Math.max(
+      1,
+      photo.height
+    );
+
+  let width =
+    MAX_IMAGE_WIDTH_EMU;
+
+  let height =
+    width / aspect;
+
+  if (
+    height >
+    MAX_IMAGE_HEIGHT_EMU
+  ) {
+    height =
+      MAX_IMAGE_HEIGHT_EMU;
+
+    width =
+      height * aspect;
+  }
+
+  return {
+    width: Math.max(
+      100000,
+      Math.round(width)
+    ),
+    height: Math.max(
+      100000,
+      Math.round(height)
+    ),
+  };
+}
+
+function imageDrawing(
+  relationId: string,
+  photo: PhotoData,
+  docPrId: number,
+  description: string
+) {
+  const size =
+    imageSizeEmu(photo);
+
+  return `<w:drawing>
+    <wp:inline
+      distT="0"
+      distB="0"
+      distL="0"
+      distR="0"
+    >
+      <wp:extent
+        cx="${size.width}"
+        cy="${size.height}"
+      />
+      <wp:docPr
+        id="${docPrId}"
+        name="${xmlEscape(
+          description
+        )}"
+        descr="${xmlEscape(
+          description
+        )}"
+      />
+      <a:graphic>
+        <a:graphicData
+          uri="http://schemas.openxmlformats.org/drawingml/2006/picture"
+        >
+          <pic:pic>
+            <pic:nvPicPr>
+              <pic:cNvPr
+                id="${docPrId}"
+                name="${xmlEscape(
+                  description
+                )}"
+              />
+              <pic:cNvPicPr/>
+            </pic:nvPicPr>
+            <pic:blipFill>
+              <a:blip
+                r:embed="${relationId}"
+              />
+              <a:stretch>
+                <a:fillRect/>
+              </a:stretch>
+            </pic:blipFill>
+            <pic:spPr>
+              <a:xfrm>
+                <a:off
+                  x="0"
+                  y="0"
+                />
+                <a:ext
+                  cx="${size.width}"
+                  cy="${size.height}"
+                />
+              </a:xfrm>
+              <a:prstGeom
+                prst="rect"
+              >
+                <a:avLst/>
+              </a:prstGeom>
+            </pic:spPr>
+          </pic:pic>
+        </a:graphicData>
+      </a:graphic>
+    </wp:inline>
+  </w:drawing>`;
+}
+
+function paragraph(
+  content: string,
+  options?: {
+    bold?: boolean;
+    size?: number;
+    center?: boolean;
+    after?: number;
+    before?: number;
+    keepNext?: boolean;
+  }
+) {
+  const bold =
+    options?.bold
+      ? '<w:b/>'
+      : '';
+
+  const size =
+    options?.size ??
+    18;
+
+  const jc =
+    options?.center
+      ? 'center'
+      : 'left';
+
+  const keepNext =
+    options?.keepNext
+      ? '<w:keepNext/>'
+      : '';
+
+  return `<w:p>
+    <w:pPr>
+      <w:jc w:val="${jc}"/>
+      <w:spacing
+        w:before="${options?.before ?? 0}"
+        w:after="${options?.after ?? 0}"
+      />
+      ${keepNext}
+    </w:pPr>
+    <w:r>
+      <w:rPr>
+        <w:rFonts
+          w:ascii="Arial"
+          w:hAnsi="Arial"
+        />
+        ${bold}
+        <w:sz w:val="${size}"/>
+        <w:szCs w:val="${size}"/>
+      </w:rPr>
+      <w:t xml:space="preserve">${xmlEscape(
+        content
+      )}</w:t>
+    </w:r>
+  </w:p>`;
+}
+
+function identityBlock(
+  group: {
+    name: string;
+    id_user: string;
+    nip?: string | null;
+    nik?: string | null;
+    status_kepegawaian?: string | null;
+    golongan_ruang?: string | null;
+    jabatan?: string | null;
+  }
+) {
+  const identity =
+    group.nip
+      ? group.nip
+      : group.nik
+        ? group.nik
+        : group.id_user;
+
+  const label =
+    group.nip
+      ? 'NIP'
+      : group.nik
+        ? 'NIK'
+        : 'ID';
+
+  const items = [
+    ['Nama', group.name || '-'],
+    [label, identity || '-'],
+    [
+      'Status',
+      group.status_kepegawaian || '-'
+    ],
+    [
+      'Gol.Ruang',
+      group.golongan_ruang || '-'
+    ],
+    [
+      'Jabatan',
+      group.jabatan || '-'
+    ],
+  ];
+
+  return items
+    .map(
+      ([name, value]) =>
+        `<w:p>
+          <w:pPr>
+            <w:spacing
+              w:before="0"
+              w:after="0"
+            />
+          </w:pPr>
+
+          <w:r>
+            <w:rPr>
+              <w:rFonts
+                w:ascii="Arial"
+                w:hAnsi="Arial"
+              />
+              <w:b/>
+              <w:sz w:val="17"/>
+              <w:szCs w:val="17"/>
+            </w:rPr>
+            <w:t xml:space="preserve">${xmlEscape(
+              name
+            )} : </w:t>
+          </w:r>
+
+          <w:r>
+            <w:rPr>
+              <w:rFonts
+                w:ascii="Arial"
+                w:hAnsi="Arial"
+              />
+              <w:sz w:val="17"/>
+              <w:szCs w:val="17"/>
+            </w:rPr>
+            <w:t xml:space="preserve">${xmlEscape(
+              value
+            )}</w:t>
+          </w:r>
+        </w:p>`
     )
-    .replace(
-      /\s+/g,
-      '_'
-    )
-    .trim();
+    .join('');
+}
+
+function tableCell(
+  content: string,
+  width: number,
+  options?: {
+    shading?: string;
+    vertical?: 'top' | 'center';
+    vMerge?: 'restart' | 'continue';
+  }
+) {
+  const shading =
+    options?.shading
+      ? `<w:shd w:fill="${options.shading}"/>`
+      : '';
+
+  const vertical =
+    options?.vertical ||
+    'center';
+
+  const merge =
+    options?.vMerge
+      ? `<w:vMerge w:val="${options.vMerge}"/>`
+      : '';
+
+  return `<w:tc>
+    <w:tcPr>
+      <w:tcW
+        w:w="${width}"
+        w:type="dxa"
+      />
+      <w:vAlign
+        w:val="${vertical}"
+      />
+      ${merge}
+      ${shading}
+
+      <w:tcMar>
+        <w:top
+          w:w="60"
+          w:type="dxa"
+        />
+        <w:bottom
+          w:w="60"
+          w:type="dxa"
+        />
+        <w:left
+          w:w="55"
+          w:type="dxa"
+        />
+        <w:right
+          w:w="55"
+          w:type="dxa"
+        />
+      </w:tcMar>
+
+      <w:tcBorders>
+        <w:top
+          w:val="single"
+          w:sz="5"
+          w:color="AAB4BE"
+        />
+        <w:left
+          w:val="single"
+          w:sz="5"
+          w:color="AAB4BE"
+        />
+        <w:bottom
+          w:val="single"
+          w:sz="5"
+          w:color="AAB4BE"
+        />
+        <w:right
+          w:val="single"
+          w:sz="5"
+          w:color="AAB4BE"
+        />
+      </w:tcBorders>
+    </w:tcPr>
+
+    ${content}
+  </w:tc>`;
+}
+
+function tableParagraph(
+  content: string,
+  center = true,
+  size = 17,
+  bold = false
+) {
+  return `<w:p>
+    <w:pPr>
+      <w:jc w:val="${
+        center
+          ? 'center'
+          : 'left'
+      }"/>
+      <w:spacing
+        w:before="0"
+        w:after="0"
+      />
+    </w:pPr>
+
+    <w:r>
+      <w:rPr>
+        <w:rFonts
+          w:ascii="Arial"
+          w:hAnsi="Arial"
+        />
+        ${bold ? '<w:b/>' : ''}
+        <w:sz w:val="${size}"/>
+        <w:szCs w:val="${size}"/>
+      </w:rPr>
+      <w:t xml:space="preserve">${xmlEscape(
+        content
+      )}</w:t>
+    </w:r>
+  </w:p>`;
+}
+
+function photoCell(
+  photo:
+    | PhotoData
+    | undefined,
+  relationId:
+    | string
+    | null,
+  docPrId: number
+) {
+  if (
+    !photo ||
+    !relationId
+  ) {
+    return tableCell(
+      tableParagraph(
+        'Tidak ada foto',
+        true,
+        15
+      ),
+      1450,
+      {
+        vertical: 'center'
+      }
+    );
+  }
+
+  const drawing =
+    imageDrawing(
+      relationId,
+      photo,
+      docPrId,
+      `Foto absensi ${photo.file_id}`
+    );
+
+  return tableCell(
+    `<w:p>
+      <w:pPr>
+        <w:jc w:val="center"/>
+        <w:spacing
+          w:before="0"
+          w:after="0"
+        />
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:rFonts
+            w:ascii="Arial"
+            w:hAnsi="Arial"
+          />
+        </w:rPr>
+        ${drawing}
+      </w:r>
+    </w:p>`,
+    1450,
+    {
+      vertical: 'center'
+    }
+  );
+}
+
+function tableRow(
+  cells: string[],
+  height: number,
+  header = false
+) {
+  return `<w:tr>
+    <w:trPr>
+      <w:trHeight
+        w:val="${height}"
+        w:hRule="atLeast"
+      />
+      ${header
+        ? '<w:tblHeader/>'
+        : ''}
+    </w:trPr>
+    ${cells.join('')}
+  </w:tr>`;
 }
 
 function buildDocumentXml(
@@ -372,238 +1030,204 @@ function buildDocumentXml(
     records: RowData[];
   }>,
   bulan: string,
-  tahun: string
+  tahun: string,
+  photoMap: Map<string, PhotoData>
 ) {
-  const relations: Array<{
-    id: string;
-    url: string;
-  }> = [];
+  const imageRelations: ImageRelation[] = [];
+  const relationByFileId =
+    new Map<string, string>();
 
   let relationCounter = 1;
+  let docPrCounter = 1;
 
-  const getRelation = (
-    fileId?: string | null
-  ) => {
-    if (!fileId) return null;
+  const getImageRelation =
+    (fileId?: string | null) => {
+      if (!fileId) {
+        return null;
+      }
 
-    const url =
-      driveUrl(fileId);
+      if (
+        relationByFileId.has(
+          fileId
+        )
+      ) {
+        return relationByFileId.get(
+          fileId
+        )!;
+      }
 
-    if (!url) return null;
+      const photo =
+        photoMap.get(
+          fileId
+        );
 
-    const existing =
-      relations.find(
-        (item) =>
-          item.url === url
+      if (!photo) {
+        return null;
+      }
+
+      const extension =
+        photo.extension;
+
+      const relationId =
+        `rIdImage${relationCounter++}`;
+
+      const mediaName =
+        `word/media/image${imageRelations.length + 1}.${extension}`;
+
+      imageRelations.push({
+        id: relationId,
+        target: `media/image${imageRelations.length + 1}.${extension}`
+      });
+
+      relationByFileId.set(
+        fileId,
+        relationId
       );
 
-    if (existing) {
-      return existing.id;
-    }
+      return relationId;
+    };
 
-    const id =
-      `rIdPhoto${relationCounter++}`;
+  const header =
+    tableRow(
+      [
+        tableCell(
+          tableParagraph(
+            'No',
+            true,
+            17,
+            true
+          ),
+          700,
+          {
+            shading:
+              'E2E8F0'
+          }
+        ),
+        tableCell(
+          tableParagraph(
+            'Nama / NIP-NIK / Jabatan',
+            true,
+            17,
+            true
+          ),
+          3900,
+          {
+            shading:
+              'E2E8F0'
+          }
+        ),
+        tableCell(
+          tableParagraph(
+            'Tanggal',
+            true,
+            17,
+            true
+          ),
+          1200,
+          {
+            shading:
+              'E2E8F0'
+          }
+        ),
+        tableCell(
+          tableParagraph(
+            'Jam',
+            true,
+            17,
+            true
+          ),
+          1650,
+          {
+            shading:
+              'E2E8F0'
+          }
+        ),
+        tableCell(
+          tableParagraph(
+            'Status',
+            true,
+            17,
+            true
+          ),
+          1700,
+          {
+            shading:
+              'E2E8F0'
+          }
+        ),
+        tableCell(
+          tableParagraph(
+            'Keterangan',
+            true,
+            17,
+            true
+          ),
+          2500,
+          {
+            shading:
+              'E2E8F0'
+          }
+        ),
+        tableCell(
+          tableParagraph(
+            'Foto Masuk',
+            true,
+            17,
+            true
+          ),
+          1450,
+          {
+            shading:
+              'E2E8F0'
+          }
+        ),
+        tableCell(
+          tableParagraph(
+            'Foto Pulang',
+            true,
+            17,
+            true
+          ),
+          1450,
+          {
+            shading:
+              'E2E8F0'
+          }
+        )
+      ],
+      650,
+      true
+    );
 
-    relations.push({
-      id,
-      url
-    });
-
-    return id;
-  };
-
-  const header = rowXml(
-    [
-      tableCell(
-        paragraph('No', {
-          bold: true,
-          size: 17,
-          center: true
-        }),
-        700,
-        {
-          shading: 'E2E8F0'
-        }
-      ),
-      tableCell(
-        paragraph(
-          'Nama / NIP-NIK / Jabatan',
-          {
-            bold: true,
-            size: 17,
-            center: true
-          }
-        ),
-        3900,
-        {
-          shading: 'E2E8F0'
-        }
-      ),
-      tableCell(
-        paragraph(
-          'Tanggal',
-          {
-            bold: true,
-            size: 17,
-            center: true
-          }
-        ),
-        1200,
-        {
-          shading: 'E2E8F0'
-        }
-      ),
-      tableCell(
-        paragraph(
-          'Jam',
-          {
-            bold: true,
-            size: 17,
-            center: true
-          }
-        ),
-        1650,
-        {
-          shading: 'E2E8F0'
-        }
-      ),
-      tableCell(
-        paragraph(
-          'Status',
-          {
-            bold: true,
-            size: 17,
-            center: true
-          }
-        ),
-        1700,
-        {
-          shading: 'E2E8F0'
-        }
-      ),
-      tableCell(
-        paragraph(
-          'Keterangan',
-          {
-            bold: true,
-            size: 17,
-            center: true
-          }
-        ),
-        2500,
-        {
-          shading: 'E2E8F0'
-        }
-      ),
-      tableCell(
-        paragraph(
-          'Foto Masuk',
-          {
-            bold: true,
-            size: 17,
-            center: true
-          }
-        ),
-        1450,
-        {
-          shading: 'E2E8F0'
-        }
-      ),
-      tableCell(
-        paragraph(
-          'Foto Pulang',
-          {
-            bold: true,
-            size: 17,
-            center: true
-          }
-        ),
-        1450,
-        {
-          shading: 'E2E8F0'
-        }
-      )
-    ],
-    650,
-    true
-  );
-
-  const tableRows: string[] = [
+  const rows: string[] = [
     header
   ];
 
-  let groupNumber = 1;
+  let number = 1;
 
   for (
     const group of groups
   ) {
-    const firstRow =
-      group.records
-        .length > 0;
-
     group.records.forEach(
-      (record, recordIndex) => {
+      (record, index) => {
         const jam =
           normalizeJam(record);
 
-        const photoInRelation =
-          getRelation(
-            record.foto_masuk_file_id
-          );
-
-        const photoOutRelation =
-          getRelation(
-            record.foto_pulang_file_id
-          );
-
-        const identity = [
-          identityParagraph(
-            'Nama',
-            group.name
-          ),
-          identityParagraph(
-            group.nip
-              ? 'NIP'
-              : group.nik
-                ? 'NIK'
-                : 'ID',
-            group.nip ||
-              group.nik ||
-              group.id_user
-          ),
-          identityParagraph(
-            'Status',
-            group.status_kepegawaian ||
-              '-'
-          ),
-          identityParagraph(
-            'Gol.Ruang',
-            group.golongan_ruang ||
-              '-'
-          ),
-          identityParagraph(
-            'Jabatan',
-            group.jabatan ||
-              '-'
-          )
-        ].join('');
-
         const cells: string[] = [];
 
-        if (recordIndex === 0) {
+        if (index === 0) {
           cells.push(
             tableCell(
-              paragraph(
-                groupNumber,
-                {
-                  bold: true,
-                  size: 18,
-                  center: true
-                }
+              tableParagraph(
+                number,
+                true,
+                18,
+                true
               ),
               700,
               {
-                vertical: 'top',
+                vertical:
+                  'top',
                 vMerge:
                   group.records.length > 1
                     ? 'restart'
@@ -614,10 +1238,13 @@ function buildDocumentXml(
 
           cells.push(
             tableCell(
-              identity,
+              identityBlock(
+                group
+              ),
               3900,
               {
-                vertical: 'top',
+                vertical:
+                  'top',
                 vMerge:
                   group.records.length > 1
                     ? 'restart'
@@ -631,8 +1258,10 @@ function buildDocumentXml(
               '',
               700,
               {
-                vertical: 'top',
-                vMerge: 'continue'
+                vertical:
+                  'top',
+                vMerge:
+                  'continue'
               }
             )
           );
@@ -642,8 +1271,10 @@ function buildDocumentXml(
               '',
               3900,
               {
-                vertical: 'top',
-                vMerge: 'continue'
+                vertical:
+                  'top',
+                vMerge:
+                  'continue'
               }
             )
           );
@@ -651,14 +1282,12 @@ function buildDocumentXml(
 
         cells.push(
           tableCell(
-            paragraph(
+            tableParagraph(
               formatDate(
                 record.date
               ),
-              {
-                size: 17,
-                center: true
-              }
+              true,
+              16
             ),
             1200
           )
@@ -666,13 +1295,10 @@ function buildDocumentXml(
 
         cells.push(
           tableCell(
-            paragraph(
+            tableParagraph(
               `${jam.masuk} - ${jam.pulang}`,
-              {
-                size: 17,
-                bold: true,
-                center: true
-              }
+              true,
+              16
             ),
             1650
           )
@@ -680,14 +1306,11 @@ function buildDocumentXml(
 
         cells.push(
           tableCell(
-            paragraph(
+            tableParagraph(
               record.status ||
                 '-',
-              {
-                size: 17,
-                bold: true,
-                center: true
-              }
+              true,
+              16
             ),
             1700
           )
@@ -695,47 +1318,72 @@ function buildDocumentXml(
 
         cells.push(
           tableCell(
-            paragraph(
+            tableParagraph(
               record.keterangan ||
                 '-',
-              {
-                size: 17,
-                center: false
-              }
+              false,
+              16
             ),
-            2500
+            2500,
+            {
+              vertical:
+                'top'
+            }
           )
         );
 
-        cells.push(
-          imageLinkCell(
-            record.foto_masuk_file_id,
-            photoInRelation,
-            1450
-          )
-        );
+        const photoIn =
+          record.foto_masuk_file_id
+            ? photoMap.get(
+                record.foto_masuk_file_id
+              )
+            : undefined;
 
-        cells.push(
-          imageLinkCell(
-            record.foto_pulang_file_id,
-            photoOutRelation,
-            1450
-          )
-        );
+        const photoOut =
+          record.foto_pulang_file_id
+            ? photoMap.get(
+                record.foto_pulang_file_id
+              )
+            : undefined;
 
-        const row =
-          rowXml(
-            cells,
-            850
+        const relationIn =
+          getImageRelation(
+            record.foto_masuk_file_id
           );
 
-        tableRows.push(
-          row
+        const relationOut =
+          getImageRelation(
+            record.foto_pulang_file_id
+          );
+
+        cells.push(
+          photoCell(
+            photoIn,
+            relationIn,
+            docPrCounter++
+          )
+        );
+
+        cells.push(
+          photoCell(
+            photoOut,
+            relationOut,
+            docPrCounter++
+          )
+        );
+
+        rows.push(
+          tableRow(
+            cells,
+            photoIn || photoOut
+              ? 1050
+              : 650
+          )
         );
       }
     );
 
-    groupNumber++;
+    number++;
   }
 
   const title =
@@ -747,23 +1395,67 @@ function buildDocumentXml(
   const table =
     `<w:tbl>
       <w:tblPr>
-        <w:tblW w:w="14550" w:type="dxa"/>
-        <w:tblLayout w:type="fixed"/>
+        <w:tblW
+          w:w="15050"
+          w:type="dxa"
+        />
+        <w:tblLayout
+          w:type="fixed"
+        />
+
         <w:tblCellMar>
-          <w:top w:w="40" w:type="dxa"/>
-          <w:left w:w="40" w:type="dxa"/>
-          <w:bottom w:w="40" w:type="dxa"/>
-          <w:right w:w="40" w:type="dxa"/>
+          <w:top
+            w:w="35"
+            w:type="dxa"
+          />
+          <w:left
+            w:w="35"
+            w:type="dxa"
+          />
+          <w:bottom
+            w:w="35"
+            w:type="dxa"
+          />
+          <w:right
+            w:w="35"
+            w:type="dxa"
+          />
         </w:tblCellMar>
+
         <w:tblBorders>
-          <w:top w:val="single" w:sz="5" w:color="AAB4BE"/>
-          <w:left w:val="single" w:sz="5" w:color="AAB4BE"/>
-          <w:bottom w:val="single" w:sz="5" w:color="AAB4BE"/>
-          <w:right w:val="single" w:sz="5" w:color="AAB4BE"/>
-          <w:insideH w:val="single" w:sz="5" w:color="AAB4BE"/>
-          <w:insideV w:val="single" w:sz="5" w:color="AAB4BE"/>
+          <w:top
+            w:val="single"
+            w:sz="5"
+            w:color="AAB4BE"
+          />
+          <w:left
+            w:val="single"
+            w:sz="5"
+            w:color="AAB4BE"
+          />
+          <w:bottom
+            w:val="single"
+            w:sz="5"
+            w:color="AAB4BE"
+          />
+          <w:right
+            w:val="single"
+            w:sz="5"
+            w:color="AAB4BE"
+          />
+          <w:insideH
+            w:val="single"
+            w:sz="5"
+            w:color="AAB4BE"
+          />
+          <w:insideV
+            w:val="single"
+            w:sz="5"
+            w:color="AAB4BE"
+          />
         </w:tblBorders>
       </w:tblPr>
+
       <w:tblGrid>
         <w:gridCol w:w="700"/>
         <w:gridCol w:w="3900"/>
@@ -774,7 +1466,8 @@ function buildDocumentXml(
         <w:gridCol w:w="1450"/>
         <w:gridCol w:w="1450"/>
       </w:tblGrid>
-      ${tableRows.join('')}
+
+      ${rows.join('')}
     </w:tbl>`;
 
   const documentXml =
@@ -782,6 +1475,9 @@ function buildDocumentXml(
 <w:document
   xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
   xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
 >
   <w:body>
 
@@ -791,7 +1487,7 @@ function buildDocumentXml(
         bold: true,
         size: 28,
         center: true,
-        after: 50,
+        after: 40,
         keepNext: true
       }
     )}
@@ -800,9 +1496,9 @@ function buildDocumentXml(
       'SD GMIT OEKONA',
       {
         bold: true,
-        size: 22,
+        size: 23,
         center: true,
-        after: 30,
+        after: 25,
         keepNext: true
       }
     )}
@@ -813,7 +1509,7 @@ function buildDocumentXml(
         bold: true,
         size: 19,
         center: true,
-        after: 180,
+        after: 160,
         keepNext: true
       }
     )}
@@ -821,9 +1517,10 @@ function buildDocumentXml(
     ${table}
 
     ${paragraph(
-      'Keterangan: kolom Foto Masuk dan Foto Pulang dapat diklik untuk membuka foto pada Google Drive.',
+      'Foto absensi ditanam langsung ke dalam dokumen Word. Rasio foto dipertahankan sesuai ukuran asli.',
       {
         size: 15,
+        before: 70,
         after: 0
       }
     )}
@@ -847,16 +1544,14 @@ function buildDocumentXml(
 
   return {
     documentXml,
-    relations
+    imageRelations
   };
 }
 
 async function buildDocx(
   documentXml: string,
-  relations: Array<{
-    id: string;
-    url: string;
-  }>
+  imageRelations: ImageRelation[],
+  photoMap: Map<string, PhotoData>
 ) {
   const JSZipModule: any =
     await import('jszip');
@@ -879,6 +1574,18 @@ async function buildDocx(
     Extension="xml"
     ContentType="application/xml"
   />
+  <Default
+    Extension="jpg"
+    ContentType="image/jpeg"
+  />
+  <Default
+    Extension="jpeg"
+    ContentType="image/jpeg"
+  />
+  <Default
+    Extension="png"
+    ContentType="image/png"
+  />
   <Override
     PartName="/word/document.xml"
     ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
@@ -898,16 +1605,15 @@ async function buildDocx(
   const documentRels =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  ${relations
+  ${imageRelations
     .map(
       (relation) =>
         `<Relationship
           Id="${relation.id}"
-          Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+          Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
           Target="${xmlEscape(
-            relation.url
+            relation.target
           )}"
-          TargetMode="External"
         />`
     )
     .join('')}
@@ -933,6 +1639,70 @@ async function buildDocx(
     documentRels
   );
 
+  const relationToFile =
+    new Map<
+      string,
+      string
+    >(
+      imageRelations.map(
+        (relation) => [
+          relation.id,
+          relation.target
+        ]
+      )
+    );
+
+  for (
+    const relation of imageRelations
+  ) {
+    const target =
+      relationToFile.get(
+        relation.id
+      );
+
+    if (!target) {
+      continue;
+    }
+
+    const fileName =
+      target
+        .replace(
+          /^media\//,
+          ''
+        );
+
+    const match =
+      fileName.match(
+        /^image(\d+)\.(jpg|png)$/
+      );
+
+    if (!match) {
+      continue;
+    }
+
+    const index =
+      Number(
+        match[1]
+      ) - 1;
+
+    const photos =
+      Array.from(
+        photoMap.values()
+      );
+
+    const photo =
+      photos[index];
+
+    if (!photo) {
+      continue;
+    }
+
+    zip.file(
+      `word/${target}`,
+      photo.bytes
+    );
+  }
+
   return zip.generateAsync({
     type: 'uint8array',
     compression: 'DEFLATE',
@@ -946,18 +1716,17 @@ async function handleExport(
   request: Request
 ) {
   if (
-    request.method === 'OPTIONS'
+    request.method ===
+    'OPTIONS'
   ) {
     return new Response(
       null,
       {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods':
-            'GET, OPTIONS',
-          'Access-Control-Allow-Headers':
-            'Content-Type'
+          ...headers(),
+          'Content-Type':
+            'text/plain; charset=utf-8'
         }
       }
     );
@@ -994,12 +1763,7 @@ async function handleExport(
     const url =
       new URL(
         request.url,
-        `https://${
-          request.headers.get(
-            'host'
-          ) ||
-          'sdgoekona.vercel.app'
-        }`
+        `https://${request.headers.get('host') || 'sdgoekona.vercel.app'}`
       );
 
     let bulan =
@@ -1083,6 +1847,7 @@ async function handleExport(
       SELECT
         a.id_user,
         g.nama AS name,
+
         DATE_FORMAT(
           a.tanggal,
           '%Y-%m-%d'
@@ -1134,7 +1899,6 @@ async function handleExport(
 
         a.status,
         a.keterangan,
-
         a.foto_masuk_file_id,
         a.foto_pulang_file_id,
 
@@ -1167,7 +1931,9 @@ async function handleExport(
       sql +=
         ' AND a.id_user = ?';
 
-      params.push(idUser);
+      params.push(
+        idUser
+      );
     }
 
     sql +=
@@ -1208,14 +1974,9 @@ async function handleExport(
           id_user: string;
           nip?: string | null;
           nik?: string | null;
-          status_kepegawaian?:
-            string | null;
-          pangkat?:
-            string | null;
-          golongan_ruang?:
-            string | null;
-          jabatan?:
-            string | null;
+          status_kepegawaian?: string | null;
+          golongan_ruang?: string | null;
+          jabatan?: string | null;
           records: RowData[];
         }
       >();
@@ -1228,7 +1989,9 @@ async function handleExport(
           );
 
         const existing =
-          groupsMap.get(key);
+          groupsMap.get(
+            key
+          );
 
         if (existing) {
           existing.records.push(
@@ -1243,20 +2006,21 @@ async function handleExport(
             name:
               record.name ||
               '-',
-            id_user: key,
+            id_user:
+              key,
             nip:
               record.nip,
             nik:
               record.nik,
             status_kepegawaian:
               record.status_kepegawaian,
-            pangkat:
-              record.pangkat,
             golongan_ruang:
               record.golongan_ruang,
             jabatan:
               record.jabatan,
-            records: [record]
+            records: [
+              record
+            ]
           }
         );
       }
@@ -1267,17 +2031,34 @@ async function handleExport(
         groupsMap.values()
       );
 
+    const photoIds =
+      rows.flatMap(
+        (record) => [
+          record.foto_masuk_file_id ||
+            '',
+          record.foto_pulang_file_id ||
+            ''
+        ]
+      );
+
+    const photoMap =
+      await fetchPhotos(
+        photoIds
+      );
+
     const built =
       buildDocumentXml(
         groups,
         bulan,
-        tahun
+        tahun,
+        photoMap
       );
 
     const bytes =
       await buildDocx(
         built.documentXml,
-        built.relations
+        built.imageRelations,
+        photoMap
       );
 
     if (
@@ -1313,18 +2094,15 @@ async function handleExport(
       {
         status: 200,
         headers: {
+          ...headers(),
           'Content-Type':
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'Content-Disposition':
             `attachment; filename="${filename}"`,
           'Content-Length':
-            String(bytes.byteLength),
-          'Access-Control-Allow-Origin':
-            '*',
-          'Access-Control-Allow-Methods':
-            'GET, OPTIONS',
-          'Cache-Control':
-            'no-store'
+            String(
+              bytes.byteLength
+            )
         }
       }
     );
@@ -1347,36 +2125,18 @@ async function handleExport(
   }
 }
 
-function jsonResponse(
-  data: unknown,
-  status = 200
-) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-      headers: {
-        'Content-Type':
-          'application/json; charset=utf-8',
-        'Access-Control-Allow-Origin':
-          '*',
-        'Access-Control-Allow-Methods':
-          'GET, OPTIONS',
-        'Cache-Control':
-          'no-store'
-      }
-    }
-  );
-}
-
 export async function GET(
   request: Request
 ) {
-  return handleExport(request);
+  return handleExport(
+    request
+  );
 }
 
 export async function OPTIONS(
   request: Request
 ) {
-  return handleExport(request);
+  return handleExport(
+    request
+  );
 }
