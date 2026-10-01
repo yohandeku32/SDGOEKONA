@@ -65,7 +65,7 @@ export default {
         );
       }
 
-      let body: any;
+      let body: unknown;
       try {
         body = await request.json();
       } catch {
@@ -76,9 +76,10 @@ export default {
         );
       }
 
-      const username = String(body?.username || body?.id || '').trim();
-      const password = String(body?.password || '');
-      const role = String(body?.role || '').trim().toLowerCase();
+      const payload = (body && typeof body === 'object') ? body as Record<string, unknown> : {};
+      const username = String(payload.username ?? payload.id ?? '').trim();
+      const password = String(payload.password ?? '');
+      const role = String(payload.role ?? '').trim().toLowerCase();
 
       if (!username || !password || !role) {
         return json(
@@ -102,17 +103,10 @@ export default {
 
       const conn = connect({ url: databaseUrl });
 
-      let rows: any[];
-
       if (role === 'admin') {
-        rows = (await conn.execute(
+        const rows = await conn.execute(
           `
-            SELECT
-              id_user,
-              nama,
-              role,
-              password_hash,
-              aktif
+            SELECT id_user, nama, role, password_hash, aktif
             FROM system_users
             WHERE LOWER(id_user) = LOWER(?)
               AND role = 'admin'
@@ -120,25 +114,52 @@ export default {
             LIMIT 1
           `,
           [username]
-        )) as any[];
-      } else {
-        rows = (await conn.execute(
-          `
-            SELECT
-              id_user,
-              nama,
-              role,
-              password_hash,
-              aktif
-            FROM guru
-            WHERE LOWER(id_user) = LOWER(?)
-              AND role = ?
-              AND aktif = 1
-            LIMIT 1
-          `,
-          [username, role]
-        )) as any[];
+        );
+
+        if (!Array.isArray(rows) || rows.length === 0) {
+          return json(
+            request,
+            { status: 'error', message: 'Username atau password salah.' },
+            401
+          );
+        }
+
+        const account = rows[0] as Record<string, unknown>;
+        const valid = await verifyPassword(
+          password,
+          String(account.password_hash ?? '')
+        );
+
+        if (!valid) {
+          return json(
+            request,
+            { status: 'error', message: 'Username atau password salah.' },
+            401
+          );
+        }
+
+        return json(request, {
+          status: 'success',
+          message: 'Login berhasil.',
+          user: {
+            id: String(account.id_user),
+            name: String(account.nama),
+            role: String(account.role),
+          },
+        });
       }
+
+      const rows = await conn.execute(
+        `
+          SELECT id_user, nama, role, password_hash, aktif
+          FROM guru
+          WHERE LOWER(id_user) = LOWER(?)
+            AND role = ?
+            AND aktif = 1
+          LIMIT 1
+        `,
+        [username, role]
+      );
 
       if (!Array.isArray(rows) || rows.length === 0) {
         return json(
@@ -148,9 +169,13 @@ export default {
         );
       }
 
-      const account = rows[0];
+      const account = rows[0] as Record<string, unknown>;
+      const valid = await verifyPassword(
+        password,
+        String(account.password_hash ?? '')
+      );
 
-      if (!verifyPassword(password, String(account.password_hash || ''))) {
+      if (!valid) {
         return json(
           request,
           { status: 'error', message: 'Username atau password salah.' },
@@ -174,8 +199,7 @@ export default {
         request,
         {
           status: 'error',
-          message:
-            error instanceof Error ? error.message : String(error),
+          message: 'Terjadi kesalahan pada server login.',
         },
         500
       );
