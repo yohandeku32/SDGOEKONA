@@ -878,7 +878,7 @@ async function handleRequest(request: Request) {
                   hasilFoto.message ||
                   'Foto manual gagal disimpan ke Google Drive.',
               },
-              500
+              hasilFoto.status === 'retry' ? 503 : 500
             );
           }
 
@@ -1139,7 +1139,7 @@ async function handleRequest(request: Request) {
                   hasilFoto.message ||
                   'Foto masuk gagal disimpan ke Google Drive.',
               },
-              500
+              hasilFoto.status === 'retry' ? 503 : 500
             );
           }
 
@@ -1316,7 +1316,7 @@ async function handleRequest(request: Request) {
                   hasilFoto.message ||
                   'Foto pulang gagal disimpan ke Google Drive.',
               },
-              500
+              hasilFoto.status === 'retry' ? 503 : 500
             );
           }
 
