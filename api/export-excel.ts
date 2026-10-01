@@ -1,4 +1,5 @@
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 import { connect } from '@tidbcloud/serverless';
 import * as ExcelJS from 'exceljs';
