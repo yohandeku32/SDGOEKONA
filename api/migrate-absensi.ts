@@ -59,8 +59,7 @@ function resolveStatus(
   return status || 'MASUK';
 }
 
-export default {
-  async fetch(request: Request) {
+async function handleRequest(request: Request) {
     if (request.method !== 'POST') {
       return json(
         {
@@ -339,5 +338,9 @@ export default {
         500
       );
     }
-  },
-};
+  }
+}
+
+export async function POST(request: Request) {
+  return handleRequest(request);
+}
