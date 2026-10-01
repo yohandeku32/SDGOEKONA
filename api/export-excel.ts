@@ -1,7 +1,7 @@
 export const runtime = 'nodejs';
 
 import { connect } from '@tidbcloud/serverless';
-import ExcelJS from 'exceljs';
+import * as ExcelJS from 'exceljs';
 import { SCHOOL_CONFIG } from './school-config';
 
 type RowData = {
@@ -250,8 +250,7 @@ async function buildExcel(
     },
   ];
 
-  worksheet.columns =
-    columns as ExcelJS.Column[];
+  worksheet.columns = columns;
 
   worksheet.mergeCells(
     'A1:N1'
@@ -541,9 +540,7 @@ async function buildExcel(
   const buffer =
     await workbook.xlsx.writeBuffer();
 
-  return new Uint8Array(
-    buffer as ArrayBuffer
-  );
+  return new Uint8Array(buffer as Uint8Array);
 }
 
 async function handleExport(
