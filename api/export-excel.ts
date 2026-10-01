@@ -177,6 +177,23 @@ function linkCell(
   );
 }
 
+
+function formatDate(value: unknown): string {
+  const text = String(value ?? '');
+
+  if (!text) {
+    return '-';
+  }
+
+  const parts = text.split('-');
+
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+
+  return text;
+}
+
 function buildSheet(
   rows: RowData[],
   bulan: string,
