@@ -135,6 +135,7 @@ function tableCell(
     center?: boolean;
     shading?: string;
     vertical?: 'top' | 'center' | 'bottom';
+    vMerge?: 'restart' | 'continue';
   }
 ) {
   const shading = options?.shading
@@ -144,10 +145,16 @@ function tableCell(
   const vertical =
     options?.vertical ?? 'center';
 
+  const vMerge =
+    options?.vMerge
+      ? `<w:vMerge w:val="${options.vMerge}"/>`
+      : '';
+
   return `<w:tc>
     <w:tcPr>
       <w:tcW w:w="${width}" w:type="dxa"/>
       <w:vAlign w:val="${vertical}"/>
+      ${vMerge}
       ${shading}
       <w:tcMar>
         <w:top w:w="75" w:type="dxa"/>
@@ -596,7 +603,11 @@ function buildDocumentXml(
               ),
               700,
               {
-                vertical: 'center'
+                vertical: 'top',
+                vMerge:
+                  group.records.length > 1
+                    ? 'restart'
+                    : undefined
               }
             )
           );
@@ -606,7 +617,33 @@ function buildDocumentXml(
               identity,
               3900,
               {
-                vertical: 'top'
+                vertical: 'top',
+                vMerge:
+                  group.records.length > 1
+                    ? 'restart'
+                    : undefined
+              }
+            )
+          );
+        } else {
+          cells.push(
+            tableCell(
+              '',
+              700,
+              {
+                vertical: 'top',
+                vMerge: 'continue'
+              }
+            )
+          );
+
+          cells.push(
+            tableCell(
+              '',
+              3900,
+              {
+                vertical: 'top',
+                vMerge: 'continue'
               }
             )
           );
@@ -697,35 +734,6 @@ function buildDocumentXml(
         );
       }
     );
-
-    // Merge No dan Identitas seperti Dashboard Admin.
-    if (
-      group.records.length > 1
-    ) {
-      // Merge dibuat setelah row selesai
-      const startIndex =
-        tableRows.length -
-        group.records.length;
-
-      const endIndex =
-        tableRows.length - 1;
-
-      const firstTableRowXml =
-        tableRows[startIndex];
-
-      const mergedNo =
-        firstTableRowXml.replace(
-          '</w:tc>',
-          '<w:tcPr><w:vMerge w:val="restart"/></w:tcPr></w:tcPr></w:tc>'
-        );
-
-      // Word XML lebih stabil bila merge cell dibuat
-      // langsung saat row dibuat. Untuk menjaga
-      // kompatibilitas, group akan ditulis tanpa
-      // physical merge bila lebih dari satu record.
-      void mergedNo;
-      void endIndex;
-    }
 
     groupNumber++;
   }
