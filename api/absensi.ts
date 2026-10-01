@@ -1761,254 +1761,213 @@ async function uploadFotoNow(
   let lastErrorMessage = '';
 
   for (const candidateUrl of candidates) {
-    for (
-      let attempt = 0;
-      attempt <= APPS_SCRIPT_RETRY_DELAYS_MS.length;
-      attempt += 1
-    ) {
-      const controller = new AbortController();
+    const controller = new AbortController();
 
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, 90000);
+    // Apps Script sekarang memiliki antrean LockService sampai 150 detik.
+    // Beri waktu sedikit lebih longgar daripada waktu tunggu lock,
+    // tetapi tetap jauh di bawah batas 300 detik Vercel Hobby.
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 165000);
+
+    try {
+      console.log(
+        'UPLOAD FOTO KE APPS SCRIPT:',
+        candidateUrl
+      );
+
+      const response = await fetch(
+        candidateUrl,
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type':
+              'text/plain;charset=utf-8',
+          },
+
+          body:
+            JSON.stringify({
+              action:
+                'upload_photo_only',
+
+              id_user:
+                data.id_user,
+
+              name:
+                data.name,
+
+              date:
+                data.date,
+
+              status:
+                data.status,
+
+              photo:
+                data.photo,
+            }),
+
+          signal:
+            controller.signal,
+        }
+      );
+
+      const responseText =
+        await response.text();
+
+      let result: any = null;
 
       try {
-        console.log(
-          'UPLOAD FOTO KE APPS SCRIPT:',
-          {
-            url: candidateUrl,
-            attempt: attempt + 1
-          }
-        );
+        result = JSON.parse(responseText);
+      } catch {
+        const preview =
+          responseText
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 300);
 
-        const response = await fetch(
-          candidateUrl,
-          {
-            method: 'POST',
-
-            headers: {
-              'Content-Type':
-                'text/plain;charset=utf-8',
-            },
-
-            body:
-              JSON.stringify({
-                action:
-                  'upload_photo_only',
-
-                id_user:
-                  data.id_user,
-
-                name:
-                  data.name,
-
-                date:
-                  data.date,
-
-                status:
-                  data.status,
-
-                photo:
-                  data.photo,
-              }),
-
-            signal:
-              controller.signal,
-          }
-        );
-
-        const responseText =
-          await response.text();
-
-        let result: any = null;
-
-        try {
-          result = JSON.parse(responseText);
-        } catch {
-          const preview =
-            responseText
-              .replace(/\s+/g, ' ')
-              .trim()
-              .slice(0, 300);
-
-          console.error(
-            'RESPONSE APPS SCRIPT TIDAK JSON:',
-            {
-              url: candidateUrl,
-              status: response.status,
-              attempt: attempt + 1,
-              preview
-            }
-          );
-
-          lastErrorMessage =
-            response.status === 404
-              ? 'Endpoint Google Apps Script mengembalikan HTTP 404. Pastikan URL APPS_SCRIPT_URL adalah URL Web App production yang berakhir dengan /exec dan deployment masih aktif.'
-              : `Apps Script HTTP ${response.status}: response tidak valid.`;
-
-          const retryableStatus =
-            response.status === 408 ||
-            response.status === 425 ||
-            response.status === 429 ||
-            response.status === 500 ||
-            response.status === 502 ||
-            response.status === 503 ||
-            response.status === 504;
-
-          if (
-            retryableStatus &&
-            attempt < APPS_SCRIPT_RETRY_DELAYS_MS.length
-          ) {
-            await new Promise<void>((resolve) => {
-              setTimeout(
-                resolve,
-                APPS_SCRIPT_RETRY_DELAYS_MS[attempt]
-              );
-            });
-
-            continue;
-          }
-
-          // HTTP 404 atau response HTML lain yang bukan transient:
-          // coba kandidat URL berikutnya bila tersedia.
-          break;
-        }
-
-        if (!response.ok) {
-          lastErrorMessage =
-            result?.message ||
-            `Apps Script gagal memproses upload (HTTP ${response.status}).`;
-
-          console.error(
-            'APPS SCRIPT HTTP ERROR:',
-            {
-              url: candidateUrl,
-              status: response.status,
-              attempt: attempt + 1,
-              result
-            }
-          );
-
-          const retryableStatus =
-            response.status === 408 ||
-            response.status === 425 ||
-            response.status === 429 ||
-            response.status === 500 ||
-            response.status === 502 ||
-            response.status === 503 ||
-            response.status === 504;
-
-          if (
-            retryableStatus &&
-            attempt < APPS_SCRIPT_RETRY_DELAYS_MS.length
-          ) {
-            await new Promise<void>((resolve) => {
-              setTimeout(
-                resolve,
-                APPS_SCRIPT_RETRY_DELAYS_MS[attempt]
-              );
-            });
-
-            continue;
-          }
-
-          break;
-        }
-
-        if (
-          !result ||
-          result.status !== 'success' ||
-          !result.file_id
-        ) {
-          lastErrorMessage =
-            result?.message ||
-            'Google Drive belum mengembalikan file ID foto.';
-
-          console.error(
-            'APPS SCRIPT RESPONSE TIDAK SESUAI:',
-            {
-              url: candidateUrl,
-              attempt: attempt + 1,
-              result
-            }
-          );
-
-          // Apps Script memakai response HTTP 200 untuk beberapa error
-          // aplikasi. Jika sedang antre/busy, coba ulang otomatis.
-          const retryableApplicationError =
-            result?.status === 'retry' ||
-            /sedang memproses|antre|coba lagi|busy|temporar|sementara/i.test(
-              String(result?.message || '')
-            );
-
-          if (
-            retryableApplicationError &&
-            attempt < APPS_SCRIPT_RETRY_DELAYS_MS.length
-          ) {
-            await new Promise<void>((resolve) => {
-              setTimeout(
-                resolve,
-                APPS_SCRIPT_RETRY_DELAYS_MS[attempt]
-              );
-            });
-
-            continue;
-          }
-
-          break;
-        }
-
-        /*
-         * Beri waktu singkat agar file Google Drive
-         * selesai dipropagasikan sebelum file ID disimpan
-         * dan dibaca kembali oleh dashboard.
-         */
-        await new Promise<void>((resolve) => {
-          setTimeout(
-            resolve,
-            1200
-          );
-        });
-
-        return result;
-      } catch (error) {
         console.error(
-          'UPLOAD FOTO KE APPS SCRIPT ERROR:',
+          'RESPONSE APPS SCRIPT TIDAK JSON:',
           {
             url: candidateUrl,
-            attempt: attempt + 1,
-            error
+            status: response.status,
+            preview
           }
         );
 
-        if (
-          error instanceof DOMException &&
-          error.name === 'AbortError'
-        ) {
-          lastErrorMessage =
-            'Upload foto ke Google Drive terlalu lama dan dihentikan. Silakan coba lagi.';
-        } else {
-          lastErrorMessage =
-            error instanceof Error
-              ? error.message
-              : String(error);
-        }
+        lastErrorMessage =
+          response.status === 404
+            ? 'Endpoint Google Apps Script mengembalikan HTTP 404. Pastikan URL APPS_SCRIPT_URL adalah URL Web App production yang berakhir dengan /exec dan deployment masih aktif.'
+            : `Apps Script HTTP ${response.status}: response tidak valid.`;
 
-        if (attempt < APPS_SCRIPT_RETRY_DELAYS_MS.length) {
-          await new Promise<void>((resolve) => {
-            setTimeout(
-              resolve,
-              APPS_SCRIPT_RETRY_DELAYS_MS[attempt]
-            );
-          });
+        const retryableStatus =
+          response.status === 408 ||
+          response.status === 425 ||
+          response.status === 429 ||
+          response.status === 500 ||
+          response.status === 502 ||
+          response.status === 503 ||
+          response.status === 504;
 
-          continue;
+        if (retryableStatus) {
+          return {
+            status: 'retry',
+            message: lastErrorMessage
+          };
         }
 
         break;
-      } finally {
-        clearTimeout(timeoutId);
       }
+
+      if (!response.ok) {
+        lastErrorMessage =
+          result?.message ||
+          `Apps Script gagal memproses upload (HTTP ${response.status}).`;
+
+        console.error(
+          'APPS SCRIPT HTTP ERROR:',
+          {
+            url: candidateUrl,
+            status: response.status,
+            result
+          }
+        );
+
+        const retryableStatus =
+          response.status === 408 ||
+          response.status === 425 ||
+          response.status === 429 ||
+          response.status === 500 ||
+          response.status === 502 ||
+          response.status === 503 ||
+          response.status === 504;
+
+        if (retryableStatus) {
+          return {
+            status: 'retry',
+            message: lastErrorMessage
+          };
+        }
+
+        break;
+      }
+
+      if (
+        !result ||
+        result.status !== 'success' ||
+        !result.file_id
+      ) {
+        lastErrorMessage =
+          result?.message ||
+          'Google Drive belum mengembalikan file ID foto.';
+
+        console.error(
+          'APPS SCRIPT RESPONSE TIDAK SESUAI:',
+          {
+            url: candidateUrl,
+            result
+          }
+        );
+
+        const retryableApplicationError =
+          result?.status === 'retry' ||
+          /sedang memproses|antre|coba lagi|busy|temporar|sementara/i.test(
+            String(result?.message || '')
+          );
+
+        if (retryableApplicationError) {
+          return {
+            status: 'retry',
+            message: lastErrorMessage
+          };
+        }
+
+        break;
+      }
+
+      /*
+       * Beri waktu singkat agar file Google Drive
+       * selesai dipropagasikan sebelum file ID disimpan
+       * dan dibaca kembali oleh dashboard.
+       */
+      await new Promise<void>((resolve) => {
+        setTimeout(
+          resolve,
+          1200
+        );
+      });
+
+      return result;
+    } catch (error) {
+      console.error(
+        'UPLOAD FOTO KE APPS SCRIPT ERROR:',
+        {
+          url: candidateUrl,
+          error
+        }
+      );
+
+      if (
+        error instanceof DOMException &&
+        error.name === 'AbortError'
+      ) {
+        lastErrorMessage =
+          'Upload foto ke Google Drive terlalu lama. Sistem akan mencoba kembali otomatis.';
+      } else {
+        lastErrorMessage =
+          error instanceof Error
+            ? error.message
+            : String(error);
+      }
+
+      // Error jaringan/time-out dianggap sementara agar
+      // browser dapat mengulang request dengan foto yang sama.
+      return {
+        status: 'retry',
+        message: lastErrorMessage
+      };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
