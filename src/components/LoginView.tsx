@@ -78,12 +78,12 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-blue-50">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
       <div className="w-full max-w-md bg-white p-8 sm:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 text-center relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-32 h-32 bg-blue-600/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute bottom-0 right-0 w-32 h-32 bg-blue-600/5 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+        <div className="absolute top-0 left-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
 
-        <div className="w-20 h-20 bg-blue-600 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-600/25 relative">
+        <div className="w-20 h-20 bg-emerald-500 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/25 relative">
           <ScanFace className="w-10 h-10 text-white" />
         </div>
 
@@ -103,7 +103,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as UserRole)}
-                className="w-full px-5 py-4 bg-blue-50/50 border border-slate-200 rounded-2xl outline-none font-sans font-medium text-slate-700 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-600/10 transition-all appearance-none cursor-pointer"
+                className="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl outline-none font-sans font-medium text-slate-700 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all appearance-none cursor-pointer"
               >
                 <option value="guru">🧑‍🏫 Guru Kelas / Mapel</option>
                 <option value="kepsek">💼 Kepala Sekolah</option>
@@ -126,7 +126,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
               placeholder="Masukkan NIP atau ID User"
-              className="w-full px-5 py-4 bg-blue-50/50 border border-slate-200 rounded-2xl outline-none font-sans font-medium placeholder-slate-400 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-600/10 transition-all"
+              className="w-full px-5 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl outline-none font-sans font-medium placeholder-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all"
             />
           </div>
 
@@ -141,7 +141,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
                 placeholder="Masukkan password"
-                className="w-full px-5 py-4 pr-14 bg-blue-50/50 border border-slate-200 rounded-2xl outline-none font-sans font-medium placeholder-slate-400 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-600/10 transition-all"
+                className="w-full px-5 py-4 pr-14 bg-slate-50/50 border border-slate-200 rounded-2xl outline-none font-sans font-medium placeholder-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all"
               />
               <button
                 type="button"
@@ -168,7 +168,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-4.5 bg-blue-600 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 hover:shadow-blue-600/35 active:scale-98 disabled:opacity-50 transition-all duration-300 flex items-center justify-center gap-2 font-sans text-sm cursor-pointer"
+            className="w-full py-4.5 bg-emerald-500 text-white font-bold rounded-2xl shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 hover:shadow-emerald-500/35 active:scale-98 disabled:opacity-50 transition-all duration-300 flex items-center justify-center gap-2 font-sans text-sm cursor-pointer"
           >
             {isLoading ? (
               <>
