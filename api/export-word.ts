@@ -58,7 +58,6 @@ const PHOTO_BATCH_SIZE = 25;
 // Ukuran maksimum foto tetap proporsional terhadap foto asli.
 // Kolom foto dibuat cukup longgar agar foto tidak menempel pada garis tabel.
 const PHOTO_COLUMN_WIDTH_TWIPS = 2600;
-const PHOTO_COLUMN_HORIZONTAL_PADDING_TWIPS = 110;
 const PHOTO_COLUMN_VERTICAL_PADDING_TWIPS = 120;
 
 const MAX_IMAGE_WIDTH_EMU = 1520000;
@@ -1406,7 +1405,7 @@ function buildDocumentXml(
           cells.push(
             tableCell(
               '',
-              700,
+              550,
               {
                 vertical:
                   'top',
@@ -1419,7 +1418,7 @@ function buildDocumentXml(
           cells.push(
             tableCell(
               '',
-              3900,
+              3750,
               {
                 vertical:
                   'top',
