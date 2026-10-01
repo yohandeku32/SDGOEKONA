@@ -1087,7 +1087,7 @@ function tableCell(
 }
 
 function tableParagraph(
-  content: string,
+  content: unknown,
   center = true,
   size = 17,
   bold = false
