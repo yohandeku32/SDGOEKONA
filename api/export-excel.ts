@@ -655,8 +655,23 @@ async function handleExport(
       );
     }
 
+    const rawUrl =
+      request.url || '';
+
+    const requestOrigin =
+      request.headers.get('origin') ||
+      (request.headers.get('x-forwarded-proto') &&
+        request.headers.get('host')
+        ? `${request.headers.get('x-forwarded-proto')}://${request.headers.get('host')}`
+        : request.headers.get('host')
+          ? `https://${request.headers.get('host')}`
+          : 'https://sdgoekona.vercel.app');
+
     const url =
-      new URL(request.url);
+      new URL(
+        rawUrl,
+        requestOrigin
+      );
 
     let bulan =
       url.searchParams.get('bulan') ||
@@ -913,12 +928,6 @@ export async function GET(
 }
 
 export async function OPTIONS(
-  request: Request
-) {
-  return handleExport(request);
-}
-
-export default async function handler(
   request: Request
 ) {
   return handleExport(request);
