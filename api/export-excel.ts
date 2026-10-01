@@ -321,8 +321,8 @@ function getImageExtension(
 }
 
 function addPhotoToCell(
-  workbook: ExcelJS.Workbook,
-  worksheet: ExcelJS.Worksheet,
+  workbook: any,
+  worksheet: any,
   cellAddress: string,
   photo: PhotoData | undefined,
   hyperlink: string
