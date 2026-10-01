@@ -27,36 +27,62 @@ function documentXml(rows:any[],bulan:string,tahun:string){
 
 function buildDocx(rows:any[],bulan:string,tahun:string){const ct=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;const rels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;return zipFiles([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:documentXml(rows,bulan,tahun)}]);}
 
-export default {async fetch(request:Request){if(request.method==='OPTIONS')return corsJson(null,204);if(request.method!=='GET')return corsJson({status:'error',message:'Method tidak didukung.'},405);try{const databaseUrl=process.env.DATABASE_URL;if(!databaseUrl)return corsJson({status:'error',message:'DATABASE_URL belum ditemukan di Vercel.'},500);
- const url=new URL(request.url);
- 
- let bulan=url.searchParams.get('bulan')||'';
- bulan = bulan.padStart(2, '0'); // Fix parameter bulan
- 
- const tahun=url.searchParams.get('tahun')||'';
- const idUser=url.searchParams.get('id_user')||'';
- const q=String(url.searchParams.get('q')||'').trim().toLowerCase();
- 
- if(!/^(0[1-9]|1[0-2])$/.test(bulan))return corsJson({status:'error',message:'Parameter bulan tidak valid.'},400);
- if(!/^\d{4}$/.test(tahun))return corsJson({status:'error',message:'Parameter tahun tidak valid.'},400);
- 
- const conn=connect({url:databaseUrl});
- let gs='SELECT id_user,nama,nip,nik,status_kepegawaian,golongan_ruang,jabatan FROM guru WHERE aktif=1 AND role<>"admin"';
- const gp:string[]=[];if(idUser){gs+=' AND id_user=?';gp.push(idUser);}gs+=' ORDER BY nama ASC';
- 
- // Fix format array return TiDB Serverless untuk query Guru
- const rawGuru = await conn.execute(gs,gp) as any;
- let guru = (rawGuru?.rows ? rawGuru.rows : rawGuru) as GuruRow[];
- 
- if(q){guru=guru.filter(g=>[g.nama,g.id_user,g.nip,g.nik,g.status_kepegawaian,g.golongan_ruang,g.jabatan].filter(Boolean).join(' ').toLowerCase().includes(q));}
- if(guru.length===0)return corsJson({status:'error',message:'Tidak ada guru/pegawai pada filter yang dipilih.'},404);
+// FORMAT EXPORT KOMPATIBEL UNTUK VERCEL
+export async function GET(request: Request) { return handleExport(request); }
+export async function OPTIONS(request: Request) { return corsJson(null, 204); }
+export default async function handler(request: Request) {
+  if (request.method === 'OPTIONS') return corsJson(null, 204);
+  if (request.method !== 'GET') return corsJson({status:'error', message:'Method tidak didukung.'}, 405);
+  return handleExport(request);
+}
 
- let as='SELECT id_user,DATE_FORMAT(tanggal,\'%Y-%m-%d\') AS tanggal,TIME_FORMAT(jam_masuk,\'%H:%i\') AS jam_masuk,keterangan FROM absensi WHERE MONTH(tanggal)=? AND YEAR(tanggal)=?';
- const ap:(string|number)[]=[Number(bulan),Number(tahun)];if(idUser){as+=' AND id_user=?';ap.push(idUser);}as+=' ORDER BY id_user ASC,tanggal ASC';
- 
- // Fix format array return TiDB Serverless untuk query Absensi
- const rawAtt = await conn.execute(as,ap) as any;
- const att = (rawAtt?.rows ? rawAtt.rows : rawAtt) as AttendanceRow[];
- 
- const dates=workDates(Number(tahun),Number(bulan));const dateSet=new Set(dates);const by=new Map<string,AttendanceRow[]>();for(const a of att){if(!dateSet.has(a.tanggal))continue;if(!by.has(a.id_user))by.set(a.id_user,[]);by.get(a.id_user)!.push(a);}const late=mins(BATAS_TERLAMBAT)||0;const recap=guru.map(g=>{const rec=by.get(g.id_user)||[];const day=new Map<string,string>();const lateDates=new Set<string>();for(const a of rec){const c=category(a.keterangan);day.set(a.tanggal,c);if(c==='hadir'){const m=mins(a.jam_masuk);if(m!==null&&m>late)lateDates.add(a.tanggal);}}let hadir=0,ijin=0,sakit=0,dinasLuar=0,tanpa=0;for(const c of day.values()){if(c==='hadir')hadir++;if(c==='ijin')ijin++;if(c==='sakit')sakit++;if(c==='dinas')dinasLuar++;if(c==='tanpa')tanpa++;}const tanpaAuto=Math.max(0,dates.length-(hadir+ijin+sakit+dinasLuar+tanpa));tanpa+=tanpaAuto;return{id_user:g.id_user,nama:g.nama,nipNik:g.nip||g.nik||g.id_user||'-',golongan:g.golongan_ruang||'-',jabatan:g.jabatan||'-',statusKepegawaian:g.status_kepegawaian||'-',jumlahHariKerja:dates.length,tanpaBerita:tanpa,ijin,sakit,dinasLuar,jumlahTidakHadir:tanpa+ijin+sakit+dinasLuar,terlambat:lateDates.size,jumlahHariHadir:hadir};});
- const bytes=buildDocx(recap,bulan,tahun);return fileResponse(bytes,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',`Rekap_Absensi_${MONTHS[bulan]||bulan}_${tahun}.docx`);}catch(error){console.error('EXPORT REKAP WORD ERROR:',error);return corsJson({status:'error',message:error instanceof Error?error.message:String(error)},500);}}};
+async function handleExport(request: Request) {
+ try {
+  const databaseUrl = process.env.DATABASE_URL;
+  if(!databaseUrl) return corsJson({status:'error', message:'DATABASE_URL belum ditemukan.'}, 500);
+  
+  const url = new URL(request.url, `http://${request.headers?.get('host') || 'localhost'}`);
+  let bulan = url.searchParams.get('bulan') || '';
+  bulan = bulan.padStart(2, '0'); 
+  
+  const tahun = url.searchParams.get('tahun') || '';
+  const idUser = url.searchParams.get('id_user') || '';
+  const q = String(url.searchParams.get('q') || '').trim().toLowerCase();
+  
+  if(!/^(0[1-9]|1[0-2])$/.test(bulan)) return corsJson({status:'error', message:'Parameter bulan tidak valid.'}, 400);
+  if(!/^\d{4}$/.test(tahun)) return corsJson({status:'error', message:'Parameter tahun tidak valid.'}, 400);
+  
+  const conn = connect({url:databaseUrl});
+  
+  let gs='SELECT id_user,nama,nip,nik,status_kepegawaian,golongan_ruang,jabatan FROM guru WHERE aktif=1 AND role<>"admin"';
+  const gp:string[]=[]; if(idUser){gs+=' AND id_user=?';gp.push(idUser);} gs+=' ORDER BY nama ASC';
+  
+  const rawGuru = await conn.execute(gs,gp) as any;
+  let guru = (rawGuru?.rows ? rawGuru.rows : rawGuru) as GuruRow[];
+  
+  if(q){guru=guru.filter(g=>[g.nama,g.id_user,g.nip,g.nik,g.status_kepegawaian,g.golongan_ruang,g.jabatan].filter(Boolean).join(' ').toLowerCase().includes(q));}
+  if(guru.length===0) return corsJson({status:'error',message:'Tidak ada guru/pegawai pada filter yang dipilih.'}, 404);
+
+  // OPTIMASI ANTI-TIMEOUT TiDB
+  const startDate = `${tahun}-${bulan}-01`;
+  const nextMonth = Number(bulan) === 12 ? 1 : Number(bulan) + 1;
+  const nextYear = Number(bulan) === 12 ? Number(tahun) + 1 : Number(tahun);
+  const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+  let as='SELECT id_user,DATE_FORMAT(tanggal,\'%Y-%m-%d\') AS tanggal,TIME_FORMAT(jam_masuk,\'%H:%i\') AS jam_masuk,keterangan FROM absensi WHERE tanggal >= ? AND tanggal < ?';
+  const ap:(string|number)[] = [startDate, endDate];
+  if(idUser){as+=' AND id_user=?'; ap.push(idUser);}
+  as += ' ORDER BY id_user ASC,tanggal ASC';
+  
+  const rawAtt = await conn.execute(as,ap) as any;
+  const att = (rawAtt?.rows ? rawAtt.rows : rawAtt) as AttendanceRow[];
+  
+  const dates=workDates(Number(tahun),Number(bulan));const dateSet=new Set(dates);const by=new Map<string,AttendanceRow[]>();for(const a of att){if(!dateSet.has(a.tanggal))continue;if(!by.has(a.id_user))by.set(a.id_user,[]);by.get(a.id_user)!.push(a);}const late=mins(BATAS_TERLAMBAT)||0;const recap=guru.map(g=>{const rec=by.get(g.id_user)||[];const day=new Map<string,string>();const lateDates=new Set<string>();for(const a of rec){const c=category(a.keterangan);day.set(a.tanggal,c);if(c==='hadir'){const m=mins(a.jam_masuk);if(m!==null&&m>late)lateDates.add(a.tanggal);}}let hadir=0,ijin=0,sakit=0,dinasLuar=0,tanpa=0;for(const c of day.values()){if(c==='hadir')hadir++;if(c==='ijin')ijin++;if(c==='sakit')sakit++;if(c==='dinas')dinasLuar++;if(c==='tanpa')tanpa++;}const tanpaAuto=Math.max(0,dates.length-(hadir+ijin+sakit+dinasLuar+tanpa));tanpa+=tanpaAuto;return{id_user:g.id_user,nama:g.nama,nipNik:g.nip||g.nik||g.id_user||'-',golongan:g.golongan_ruang||'-',jabatan:g.jabatan||'-',statusKepegawaian:g.status_kepegawaian||'-',jumlahHariKerja:dates.length,tanpaBerita:tanpa,ijin,sakit,dinasLuar,jumlahTidakHadir:tanpa+ijin+sakit+dinasLuar,terlambat:lateDates.size,jumlahHariHadir:hadir};});
+  
+  const bytes=buildDocx(recap,bulan,tahun);
+  return fileResponse(bytes,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',`Rekap_Absensi_${MONTHS[bulan]||bulan}_${tahun}.docx`);
+ } catch(error) {
+  console.error('EXPORT REKAP WORD ERROR:', error);
+  return corsJson({status:'error', message: error instanceof Error ? error.message : String(error)}, 500);
+ }
+}
