@@ -47,11 +47,21 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         })
       });
 
-      const result = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      let result: any = null;
+      let rawText = '';
+
+      if (contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        rawText = await response.text();
+      }
 
       if (!response.ok || result?.status !== 'success' || !result?.user) {
         throw new Error(
-          result?.message || `Login gagal (${response.status}).`
+          result?.message ||
+          rawText ||
+          `Login gagal (${response.status}).`
         );
       }
 
