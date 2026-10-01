@@ -19,7 +19,6 @@ function cell(text: unknown, bold=false, center=true) { return `<w:tc><w:tcPr><w
 function row(cells:string[]) { return `<w:tr>${cells.join('')}</w:tr>`; }
 function formatDate(value:string) { const p=String(value||'').split('-'); return p.length===3?`${p[2]}-${p[1]}-${p[0]}`:value||'-'; }
 function jams(r:RowData) { if(r.jam_masuk||r.jam_pulang) return {in:r.jam_masuk||'-',out:r.jam_pulang||'-'}; const p=String(r.time||'').split(' - '); if(r.status==='PULANG') return {in:'-',out:p[0]||'-'}; return {in:p[0]||'-',out:p[1]||'-'}; }
-function drive(fileId?:string|null) { return fileId ? `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view` : ''; }
 
 function documentXml(rows:RowData[], bulan:string, tahun:string) {
   const headers=['NO','NAMA','TANGGAL','JAM MASUK','JAM PULANG','STATUS','KETERANGAN','FOTO MASUK','FOTO PULANG'];
@@ -54,38 +53,65 @@ function buildDocx(rows:RowData[], bulan:string, tahun:string) {
  return zipFiles([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:documentXml(rows,bulan,tahun)}]);
 }
 
-export default { async fetch(request:Request) {
- if(request.method==='OPTIONS') return corsJson(null,204);
- if(request.method!=='GET') return corsJson({status:'error',message:'Method tidak didukung.'},405);
- try{
-  const databaseUrl=process.env.DATABASE_URL; if(!databaseUrl) return corsJson({status:'error',message:'DATABASE_URL belum ditemukan di Vercel.'},500);
-  const url=new URL(request.url); 
-  
-  let bulan=url.searchParams.get('bulan')||''; 
-  bulan = bulan.padStart(2, '0'); // Fix parameter bulan
-  
-  const tahun=url.searchParams.get('tahun')||''; 
-  const idUser=url.searchParams.get('id_user')||'';
-  
-  if(!/^(0[1-9]|1[0-2])$/.test(bulan)) return corsJson({status:'error',message:'Parameter bulan tidak valid.'},400);
-  if(!/^\d{4}$/.test(tahun)) return corsJson({status:'error',message:'Parameter tahun tidak valid.'},400);
-  
-  const conn=connect({url:databaseUrl}); 
-  let sql=`SELECT a.id_user,g.nama AS name,DATE_FORMAT(a.tanggal,'%Y-%m-%d') AS date,CASE WHEN a.jam_masuk IS NOT NULL AND a.jam_pulang IS NOT NULL THEN CONCAT(TIME_FORMAT(a.jam_masuk,'%H:%i'),' - ',TIME_FORMAT(a.jam_pulang,'%H:%i')) WHEN a.jam_masuk IS NOT NULL THEN TIME_FORMAT(a.jam_masuk,'%H:%i') WHEN a.jam_pulang IS NOT NULL THEN TIME_FORMAT(a.jam_pulang,'%H:%i') ELSE '' END AS time,TIME_FORMAT(a.jam_masuk,'%H:%i') AS jam_masuk,TIME_FORMAT(a.jam_pulang,'%H:%i') AS jam_pulang,a.status,a.keterangan,a.foto_masuk_file_id,a.foto_pulang_file_id,g.nip,g.nik,g.status_kepegawaian,g.golongan_ruang,g.jabatan FROM absensi a INNER JOIN guru g ON g.id_user=a.id_user WHERE g.aktif=1 AND MONTH(a.tanggal)=? AND YEAR(a.tanggal)=?`;
-  
-  const params:(string|number)[]=[Number(bulan),Number(tahun)]; 
-  if(idUser){sql+=' AND a.id_user=?';params.push(idUser);} 
-  sql+=' ORDER BY g.nama ASC,a.tanggal ASC';
-  
-  // Fix format array return TiDB Serverless
-  const rawResult = await conn.execute(sql,params) as any; 
-  const rows = (rawResult?.rows ? rawResult.rows : rawResult) as RowData[];
-  
-  if(!Array.isArray(rows)||rows.length===0) return corsJson({status:'error',message:'Tidak ada data untuk diexport.'},404);
-  
-  const bytes=buildDocx(rows,bulan,tahun); 
-  const name=idUser?String(rows[0]?.name||'Guru').replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,'_'):'Semua_Guru';
-  
-  return fileResponse(bytes,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',`Absensi_${MONTHS[bulan]||bulan}_${tahun}_${name}.docx`);
- }catch(error){console.error('EXPORT WORD ERROR:',error);return corsJson({status:'error',message:error instanceof Error?error.message:String(error)},500);}
-}};
+// FORMAT EXPORT KOMPATIBEL UNTUK VERCEL (App Router & Pages Router)
+export async function GET(request: Request) { return handleExport(request); }
+export async function OPTIONS(request: Request) { return corsJson(null, 204); }
+export default async function handler(request: Request) {
+  if (request.method === 'OPTIONS') return corsJson(null, 204);
+  if (request.method !== 'GET') return corsJson({status:'error', message:'Method tidak didukung.'}, 405);
+  return handleExport(request);
+}
+
+async function handleExport(request: Request) {
+  try {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) return corsJson({status:'error', message:'DATABASE_URL belum ditemukan di Vercel.'}, 500);
+    
+    // Fallback base URL agar Vercel Nodejs tidak crash membaca endpoint relatif
+    const url = new URL(request.url, `http://${request.headers?.get('host') || 'localhost'}`); 
+    
+    let bulan = url.searchParams.get('bulan') || ''; 
+    bulan = bulan.padStart(2, '0');
+    
+    const tahun = url.searchParams.get('tahun') || ''; 
+    const idUser = url.searchParams.get('id_user') || '';
+    
+    if(!/^(0[1-9]|1[0-2])$/.test(bulan)) return corsJson({status:'error', message:'Parameter bulan tidak valid.'}, 400);
+    if(!/^\d{4}$/.test(tahun)) return corsJson({status:'error', message:'Parameter tahun tidak valid.'}, 400);
+    
+    // OPTIMASI ANTI-TIMEOUT: Menggunakan range indeks tanggal
+    const startDate = `${tahun}-${bulan}-01`;
+    const nextMonth = Number(bulan) === 12 ? 1 : Number(bulan) + 1;
+    const nextYear = Number(bulan) === 12 ? Number(tahun) + 1 : Number(tahun);
+    const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+    const conn = connect({url: databaseUrl}); 
+    let sql = `SELECT a.id_user, g.nama AS name, DATE_FORMAT(a.tanggal,'%Y-%m-%d') AS date, 
+      CASE WHEN a.jam_masuk IS NOT NULL AND a.jam_pulang IS NOT NULL THEN CONCAT(TIME_FORMAT(a.jam_masuk,'%H:%i'),' - ',TIME_FORMAT(a.jam_pulang,'%H:%i')) 
+      WHEN a.jam_masuk IS NOT NULL THEN TIME_FORMAT(a.jam_masuk,'%H:%i') 
+      WHEN a.jam_pulang IS NOT NULL THEN TIME_FORMAT(a.jam_pulang,'%H:%i') ELSE '' END AS time, 
+      TIME_FORMAT(a.jam_masuk,'%H:%i') AS jam_masuk, TIME_FORMAT(a.jam_pulang,'%H:%i') AS jam_pulang, 
+      a.status, a.keterangan, a.foto_masuk_file_id, a.foto_pulang_file_id, 
+      g.nip, g.nik, g.status_kepegawaian, g.golongan_ruang, g.jabatan 
+      FROM absensi a INNER JOIN guru g ON g.id_user=a.id_user 
+      WHERE g.aktif=1 AND a.tanggal >= ? AND a.tanggal < ?`;
+    
+    const params: (string|number)[] = [startDate, endDate]; 
+    if(idUser){sql += ' AND a.id_user=?'; params.push(idUser);} 
+    sql += ' ORDER BY g.nama ASC, a.tanggal ASC';
+    
+    // Pengecekan data array untuk driver TiDB Serverless 
+    const rawResult = await conn.execute(sql, params) as any; 
+    const rows = (rawResult?.rows ? rawResult.rows : rawResult) as RowData[];
+    
+    if(!Array.isArray(rows) || rows.length === 0) return corsJson({status:'error', message:'Tidak ada data untuk diexport.'}, 404);
+    
+    const bytes = buildDocx(rows, bulan, tahun); 
+    const name = idUser ? String(rows[0]?.name || 'Guru').replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,'_') : 'Semua_Guru';
+    
+    return fileResponse(bytes, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', `Absensi_${MONTHS[bulan]||bulan}_${tahun}_${name}.docx`);
+  } catch(error) {
+    console.error('EXPORT WORD ERROR:', error);
+    return corsJson({status:'error', message: error instanceof Error ? error.message : String(error)}, 500);
+  }
+}
