@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { connect } from '@tidbcloud/serverless';
 import { SCHOOL_CONFIG } from './school-config';
 import ExcelJS from 'exceljs';
@@ -128,6 +130,12 @@ async function fetchPhotoBatch(
     })
   });
 
+  if (!response.ok) {
+    throw new Error(
+      `Apps Script mengembalikan HTTP ${response.status}.`
+    );
+  }
+
   const text = await response.text();
 
   let result: PhotoBatchPayload;
@@ -135,7 +143,9 @@ async function fetchPhotoBatch(
   try {
     result = JSON.parse(text) as PhotoBatchPayload;
   } catch {
-    throw new Error('Response foto dari Apps Script bukan JSON.');
+    throw new Error(
+      `Response foto dari Apps Script bukan JSON (HTTP ${response.status}).`
+    );
   }
 
   if (result.status !== 'success' || !Array.isArray(result.photos)) {
