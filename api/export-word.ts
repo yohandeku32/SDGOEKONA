@@ -367,6 +367,99 @@ function normalizeMime(
   return '';
 }
 
+async function fetchDrivePhoto(
+  fileId: string
+): Promise<PhotoData | null> {
+  const urls = [
+    `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1400`,
+    `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: {
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+        }
+      });
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const mimeType = normalizeMime(
+        String(
+          response.headers.get('content-type') || ''
+        )
+      );
+
+      if (!mimeType) {
+        continue;
+      }
+
+      const arrayBuffer =
+        await response.arrayBuffer();
+
+      const bytes =
+        new Uint8Array(arrayBuffer);
+
+      if (bytes.length < 32) {
+        continue;
+      }
+
+      const dimensions =
+        getImageDimensions(
+          bytes,
+          mimeType
+        );
+
+      console.log(
+        'WORD PHOTO DRIVE DIRECT OK:',
+        fileId,
+        mimeType,
+        dimensions.width,
+        dimensions.height,
+        bytes.length
+      );
+
+      return {
+        file_id:
+          fileId,
+        base64:
+          '',
+        mime_type:
+          mimeType,
+        bytes,
+        width:
+          Math.max(
+            1,
+            dimensions.width
+          ),
+        height:
+          Math.max(
+            1,
+            dimensions.height
+          ),
+        extension:
+          mimeType === 'image/png'
+            ? 'png'
+            : 'jpg'
+      };
+    } catch (error) {
+      console.error(
+        'WORD PHOTO DRIVE DIRECT ERROR:',
+        fileId,
+        error
+      );
+    }
+  }
+
+  return null;
+}
+
 async function fetchPhotos(
   fileIds: string[]
 ) {
@@ -378,13 +471,6 @@ async function fetchPhotos(
       string,
       PhotoData
     >();
-
-  if (
-    !appsScriptUrl ||
-    fileIds.length === 0
-  ) {
-    return result;
-  }
 
   const uniqueIds =
     Array.from(
@@ -399,13 +485,60 @@ async function fetchPhotos(
       )
     );
 
+  if (
+    uniqueIds.length === 0
+  ) {
+    return result;
+  }
+
+  /*
+   * Jalur utama: ambil foto langsung dari Google Drive.
+   * Ini membuat export Word tetap berjalan walaupun
+   * action get_photos_base64 di Apps Script sedang bermasalah.
+   */
+  for (
+    const fileId of uniqueIds
+  ) {
+    const photo =
+      await fetchDrivePhoto(
+        fileId
+      );
+
+    if (photo) {
+      result.set(
+        fileId,
+        photo
+      );
+    }
+  }
+
+  /*
+   * Fallback: Apps Script.
+   * Hanya dipanggil untuk foto yang belum berhasil
+   * diambil langsung dari Drive.
+   */
+  const unresolvedIds =
+    uniqueIds.filter(
+      (fileId) =>
+        !result.has(
+          fileId
+        )
+    );
+
+  if (
+    !appsScriptUrl ||
+    unresolvedIds.length === 0
+  ) {
+    return result;
+  }
+
   for (
     let start = 0;
-    start < uniqueIds.length;
+    start < unresolvedIds.length;
     start += PHOTO_BATCH_SIZE
   ) {
     const batch =
-      uniqueIds.slice(
+      unresolvedIds.slice(
         start,
         start + PHOTO_BATCH_SIZE
       );
@@ -415,24 +548,28 @@ async function fetchPhotos(
         await fetch(
           appsScriptUrl,
           {
-            method: 'POST',
+            method:
+              'POST',
             headers: {
               'Content-Type':
                 'text/plain;charset=utf-8',
             },
-            body: JSON.stringify({
-              action:
-                'get_photos_base64',
-              file_ids:
-                batch,
-            }),
+            body:
+              JSON.stringify({
+                action:
+                  'get_photos_base64',
+                file_ids:
+                  batch,
+              }),
           }
         );
 
       const responseText =
         await response.text();
 
-      if (!response.ok) {
+      if (
+        !response.ok
+      ) {
         console.error(
           'WORD PHOTO HTTP ERROR:',
           response.status,
@@ -526,7 +663,8 @@ async function fetchPhotos(
             {
               file_id:
                 fileId,
-              base64,
+              base64:
+                base64,
               mime_type:
                 mimeType,
               bytes,
