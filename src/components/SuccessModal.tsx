@@ -16,7 +16,7 @@ export default function SuccessModal({ onClose, message = 'Data absensi Anda tel
         transition={{ type: 'spring', damping: 25, stiffness: 350 }}
         className="bg-white w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl text-center border border-slate-100"
       >
-        <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-500/30">
+        <div className="w-20 h-20 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-600/30">
           <CheckCircle className="w-10 h-10 stroke-[2.5]" />
         </div>
         <h3 className="font-display font-black text-slate-900 text-2xl">Berhasil!</h3>
@@ -25,7 +25,7 @@ export default function SuccessModal({ onClose, message = 'Data absensi Anda tel
         </p>
         <button
           onClick={onClose}
-          className="w-full mt-6 py-4 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 active:scale-95 transition-all shadow-lg shadow-emerald-500/20 font-sans"
+          className="w-full mt-6 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 font-sans"
         >
           Selesai & Muat Ulang
         </button>
