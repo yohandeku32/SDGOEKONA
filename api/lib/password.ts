@@ -1,18 +1,19 @@
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+
 const SCRYPT_N = 16_384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const KEY_LENGTH = 64;
-const MAX_MEM = 32 * 1024 * 1024;
+
+// Scrypt can need more than the nominal cost during OpenSSL allocation.
+// Keep a generous limit so Vercel Node runtime does not reject valid hashes.
+const MAX_MEM = 128 * 1024 * 1024;
 
 /**
  * Format:
  * scrypt$N$r$p$saltHex$hashHex
- *
- * node:crypto is loaded lazily so module initialization cannot crash the
- * Vercel Function before the request handler reaches its try/catch.
  */
-export async function hashPassword(password: string): Promise<string> {
-  const { randomBytes, scryptSync } = await import('node:crypto');
+export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
   const derivedKey = scryptSync(password, salt, KEY_LENGTH, {
     N: SCRYPT_N,
@@ -24,10 +25,7 @@ export async function hashPassword(password: string): Promise<string> {
   return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt}$${derivedKey.toString('hex')}`;
 }
 
-export async function verifyPassword(
-  password: string,
-  encoded: string
-): Promise<boolean> {
+export function verifyPassword(password: string, encoded: string): boolean {
   const parts = String(encoded || '').split('$');
 
   if (parts.length !== 6 || parts[0] !== 'scrypt') {
@@ -44,9 +42,6 @@ export async function verifyPassword(
     !Number.isInteger(N) ||
     !Number.isInteger(r) ||
     !Number.isInteger(p) ||
-    N <= 1 ||
-    r <= 0 ||
-    p <= 0 ||
     !salt ||
     !/^[0-9a-f]+$/i.test(expectedHex) ||
     expectedHex.length % 2 !== 0
@@ -55,13 +50,12 @@ export async function verifyPassword(
   }
 
   try {
-    const { scryptSync, timingSafeEqual } = await import('node:crypto');
     const expected = Buffer.from(expectedHex, 'hex');
     const actual = scryptSync(password, salt, expected.length, {
       N,
       r,
       p,
-      maxmem: MAX_MEM,
+      maxmem: Math.max(MAX_MEM, 128 * 1024 * 1024),
     });
 
     return (
@@ -70,6 +64,6 @@ export async function verifyPassword(
     );
   } catch (error) {
     console.error('PASSWORD VERIFY ERROR:', error);
-    throw new Error('Password verification service unavailable.');
+    return false;
   }
 }
