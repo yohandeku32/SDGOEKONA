@@ -1,7 +1,7 @@
 export const runtime = 'nodejs';
 
 import { connect } from '@tidbcloud/serverless';
-import { SCHOOL_CONFIG } from './lib/school-config';
+import { SCHOOL_CONFIG } from './school-config';
 import { corsJson, fileResponse, xmlEscape, zipFiles } from './lib/export-utils';
 
 type GuruRow={id_user:string;nama:string;nip?:string|null;nik?:string|null;status_kepegawaian?:string|null;golongan_ruang?:string|null;jabatan?:string|null};
