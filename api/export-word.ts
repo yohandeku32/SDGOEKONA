@@ -897,6 +897,23 @@ function paragraph(
   </w:p>`;
 }
 
+const PNS_NIPS = new Set([
+  '197001162000122002',
+  '196612312006042132',
+  '197406132008012010',
+]);
+
+function normalizeNip(
+  value?: string | null
+) {
+  return String(
+    value || ''
+  ).replace(
+    /\\D/g,
+    ''
+  );
+}
+
 function identityBlock(
   group: {
     name: string;
@@ -908,34 +925,37 @@ function identityBlock(
     jabatan?: string | null;
   }
 ) {
-  const identity =
-    group.nip
-      ? group.nip
-      : group.nik
-        ? group.nik
-        : group.id_user;
+  const nip =
+    normalizeNip(
+      group.nip
+    );
 
-  const label =
-    group.nip
-      ? 'NIP'
-      : group.nik
-        ? 'NIK'
-        : 'ID';
+  const status =
+    nip &&
+    PNS_NIPS.has(nip)
+      ? 'PNS'
+      : '';
 
   const items = [
-    ['Nama', group.name || '-'],
-    [label, identity || '-'],
+    [
+      'Nama',
+      group.name || ''
+    ],
+    [
+      'NIP',
+      nip || ''
+    ],
     [
       'Status',
-      group.status_kepegawaian || '-'
+      status
     ],
     [
       'Gol.Ruang',
-      group.golongan_ruang || '-'
+      group.golongan_ruang || ''
     ],
     [
       'Jabatan',
-      group.jabatan || '-'
+      group.jabatan || ''
     ],
   ];
 
@@ -982,6 +1002,7 @@ function identityBlock(
     )
     .join('');
 }
+
 
 function tableCell(
   content: string,
