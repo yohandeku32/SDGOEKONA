@@ -63,8 +63,12 @@ function json(
     data,
     {
       status,
-      headers:
-        getCorsHeaders(request),
+      headers: {
+        ...getCorsHeaders(request),
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0'
+      }
     }
   );
 }
@@ -1648,6 +1652,14 @@ async function uploadFoto(
   }
 ) {
 
+  const controller =
+    new AbortController();
+
+  const timeoutId =
+    setTimeout(() => {
+      controller.abort();
+    }, 90000);
+
   try {
 
     const response =
@@ -1682,29 +1694,29 @@ async function uploadFoto(
               photo:
                 data.photo,
             }),
+
+          signal:
+            controller.signal,
         }
       );
 
-
-    const text =
+    const responseText =
       await response.text();
 
-
     let result: any;
-
 
     try {
 
       result =
         JSON.parse(
-          text
+          responseText
         );
 
     } catch {
 
       console.error(
         'RESPONSE APPS SCRIPT:',
-        text
+        responseText
       );
 
       return {
@@ -1712,13 +1724,54 @@ async function uploadFoto(
           'error',
 
         message:
-          'Response Apps Script bukan JSON.',
+          response.ok
+            ? 'Response Apps Script bukan JSON.'
+            : `Apps Script HTTP ${response.status}: response tidak valid.`,
       };
     }
 
+    if (!response.ok) {
+
+      return {
+        status:
+          'error',
+
+        message:
+          result?.message ||
+          `Apps Script gagal memproses upload (HTTP ${response.status}).`,
+      };
+    }
+
+    if (
+      !result ||
+      result.status !==
+        'success' ||
+      !result.file_id
+    ) {
+
+      return {
+        status:
+          'error',
+
+        message:
+          result?.message ||
+          'Google Drive belum mengembalikan file ID foto.',
+      };
+    }
+
+    /*
+     * Beri waktu singkat agar file Google Drive
+     * selesai dipropagasikan sebelum file ID disimpan
+     * dan dibaca kembali oleh dashboard.
+     */
+    await new Promise<void>((resolve) => {
+      setTimeout(
+        resolve,
+        1200
+      );
+    });
 
     return result;
-
 
   } catch (error) {
 
@@ -1727,6 +1780,19 @@ async function uploadFoto(
       error
     );
 
+    if (
+      error instanceof DOMException &&
+      error.name === 'AbortError'
+    ) {
+
+      return {
+        status:
+          'error',
+
+        message:
+          'Upload foto ke Google Drive terlalu lama dan dihentikan. Silakan coba lagi.',
+      };
+    }
 
     return {
 
@@ -1740,9 +1806,14 @@ async function uploadFoto(
 
           : String(error),
     };
+
+  } finally {
+
+    clearTimeout(
+      timeoutId
+    );
   }
 }
-
 
 
 // ======================================================
