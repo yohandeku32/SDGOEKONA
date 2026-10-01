@@ -1176,134 +1176,91 @@ export default function AdminPanel({
   };
 
 
-  const downloadExportFile = async (
+  const readExportError = async (response: Response) => {
+    const text = await response.text();
+
+    if (!text.trim()) {
+      return '';
+    }
+
+    try {
+      const data = JSON.parse(text);
+      return typeof data?.message === 'string'
+        ? data.message.trim()
+        : '';
+    } catch {
+      return text.trim();
+    }
+  };
+
+  const downloadFileFromApi = async (
     url: string,
-    fallbackName: string,
-    loaderText: string
+    fallbackFileName: string,
+    loadingText: string
   ) => {
-    showLoader(loaderText);
+    showLoader(loadingText);
 
     try {
       const response = await fetch(url, {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          Accept: '*/*'
+        }
       });
 
-      const contentType =
-        String(
-          response.headers.get(
-            'content-type'
-          ) || ''
-        ).toLowerCase();
+      const contentType = String(
+        response.headers.get('content-type') || ''
+      ).toLowerCase();
 
       if (!response.ok) {
-        const text =
-          await response.text();
-
-        let message =
-          `Server export gagal (${response.status}).`;
-
-        try {
-          const data = JSON.parse(text);
-
-          if (data?.message) {
-            message =
-              String(data.message);
-          }
-        } catch {
-          if (text.trim()) {
-            message =
-              text.trim();
-          }
-        }
-
-        throw new Error(message);
+        const message = await readExportError(response);
+        throw new Error(
+          message || `Server gagal membuat file (${response.status}).`
+        );
       }
 
       if (
-        contentType.includes(
-          'application/json'
-        ) ||
-        contentType.includes(
-          'text/plain'
-        ) ||
-        contentType.includes(
-          'text/html'
-        )
+        contentType.includes('application/json') ||
+        contentType.includes('text/plain') ||
+        contentType.includes('text/html')
       ) {
-        const text =
-          await response.text();
-
-        let message =
-          'Server tidak mengirim file export.';
-
-        try {
-          const data = JSON.parse(text);
-
-          if (data?.message) {
-            message =
-              String(data.message);
-          }
-        } catch {
-          if (text.trim()) {
-            message =
-              text.trim();
-          }
-        }
-
-        throw new Error(message);
+        const message = await readExportError(response);
+        throw new Error(
+          message || 'Server tidak mengirim file export.'
+        );
       }
 
-      const blob =
-        await response.blob();
+      const blob = await response.blob();
 
       if (blob.size === 0) {
-        throw new Error(
-          'File export kosong.'
-        );
+        throw new Error('File export kosong.');
       }
 
-      let fileName =
-        fallbackName;
-
+      let fileName = fallbackFileName;
       const disposition =
-        response.headers.get(
-          'content-disposition'
-        ) || '';
+        response.headers.get('content-disposition') || '';
 
-      const utf8Match =
-        disposition.match(
-          /filename\*=UTF-8''([^;]+)/i
-        );
+      const utf8Match = disposition.match(
+        /filename\*=UTF-8''([^;]+)/i
+      );
 
       const normalMatch =
-        disposition.match(
-          /filename="([^"]+)"/i
-        ) ||
-        disposition.match(
-          /filename=([^;]+)/i
-        );
+        disposition.match(/filename=\"([^\"]+)\"/i) ||
+        disposition.match(/filename=([^;]+)/i);
 
       if (utf8Match?.[1]) {
         try {
-          fileName =
-            decodeURIComponent(
-              utf8Match[1]
-            );
+          fileName = decodeURIComponent(utf8Match[1]);
         } catch {
-          fileName =
-            utf8Match[1];
+          fileName = utf8Match[1];
         }
       } else if (normalMatch?.[1]) {
-        fileName =
-          normalMatch[1].trim();
+        fileName = normalMatch[1].trim();
       }
 
-      const objectUrl =
-        URL.createObjectURL(blob);
-
-      const anchor =
-        document.createElement('a');
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
 
       anchor.href = objectUrl;
       anchor.download = fileName;
@@ -1314,11 +1271,8 @@ export default function AdminPanel({
       anchor.remove();
 
       window.setTimeout(() => {
-        URL.revokeObjectURL(
-          objectUrl
-        );
-      }, 1000);
-
+        URL.revokeObjectURL(objectUrl);
+      }, 1500);
     } catch (error) {
       showAdminMessage(
         'Export Gagal',
@@ -1335,8 +1289,8 @@ export default function AdminPanel({
   const handleDownloadExcel = async () => {
     if (filteredRecords.length === 0) {
       showAdminMessage(
-        'Data Tidak Tersedia',
-        'Tidak ada data absensi pada periode yang dipilih.',
+        'Data Belum Tersedia',
+        'Tidak ada data absensi untuk diexport pada periode yang dipilih.',
         'warning'
       );
       return;
@@ -1351,11 +1305,8 @@ export default function AdminPanel({
       params.set('id_user', selectedGuru);
     }
 
-    const url =
-      `${EXPORT_EXCEL_URL}?${params.toString()}`;
-
-    await downloadExportFile(
-      url,
+    await downloadFileFromApi(
+      `${EXPORT_EXCEL_URL}?${params.toString()}`,
       `Absensi_${selectedMonth}_${selectedYear}.xlsx`,
       'Menyiapkan file Excel...'
     );
@@ -1364,8 +1315,8 @@ export default function AdminPanel({
   const handleDownloadWord = async () => {
     if (filteredRecords.length === 0) {
       showAdminMessage(
-        'Data Tidak Tersedia',
-        'Tidak ada data absensi pada periode yang dipilih.',
+        'Data Belum Tersedia',
+        'Tidak ada data absensi untuk diexport pada periode yang dipilih.',
         'warning'
       );
       return;
@@ -1380,11 +1331,8 @@ export default function AdminPanel({
       params.set('id_user', selectedGuru);
     }
 
-    const url =
-      `${EXPORT_WORD_URL}?${params.toString()}`;
-
-    await downloadExportFile(
-      url,
+    await downloadFileFromApi(
+      `${EXPORT_WORD_URL}?${params.toString()}`,
       `Absensi_${selectedMonth}_${selectedYear}.docx`,
       'Menyiapkan file Word...'
     );
@@ -1393,8 +1341,8 @@ export default function AdminPanel({
   const handleDownloadMonthlyRecapWord = async () => {
     if (monthlyRecap.length === 0) {
       showAdminMessage(
-        'Rekap Tidak Tersedia',
-        'Tidak ada data rekap pada periode yang dipilih.',
+        'Rekap Belum Tersedia',
+        'Tidak ada data rekap untuk diexport pada periode yang dipilih.',
         'warning'
       );
       return;
@@ -1413,11 +1361,8 @@ export default function AdminPanel({
       params.set('q', searchQuery.trim());
     }
 
-    const url =
-      `${EXPORT_REKAP_WORD_URL}?${params.toString()}`;
-
-    await downloadExportFile(
-      url,
+    await downloadFileFromApi(
+      `${EXPORT_REKAP_WORD_URL}?${params.toString()}`,
       `Rekap_Absensi_${selectedMonth}_${selectedYear}.docx`,
       'Menyiapkan rekap Word...'
     );
