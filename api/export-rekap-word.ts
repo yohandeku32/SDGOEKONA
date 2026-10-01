@@ -1,5 +1,3 @@
-export const runtime = 'nodejs';
-
 import { connect } from '@tidbcloud/serverless';
 import { SCHOOL_CONFIG, LOGO_KABUPATEN_URL, LOGO_TUT_WURI_URL } from './school-config';
 import {
@@ -125,8 +123,22 @@ const CELL_MARGINS = {
   right: 70
 };
 
+
+function corsJson(data: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  headers.set('Cache-Control', 'no-store');
+
+  return Response.json(data, {
+    ...init,
+    headers
+  });
+}
+
 function badRequest(message: string) {
-  return Response.json(
+  return corsJson(
     {
       status: 'error',
       message
@@ -406,7 +418,7 @@ function streamBytes(bytes: Uint8Array) {
 export default {
   async fetch(request: Request) {
     if (request.method !== 'GET') {
-      return Response.json(
+      return corsJson(
         {
           status: 'error',
           message: 'Method tidak didukung.'
@@ -422,7 +434,7 @@ export default {
         process.env.DATABASE_URL;
 
       if (!databaseUrl) {
-        return Response.json(
+        return corsJson(
           {
             status: 'error',
             message:
@@ -527,7 +539,7 @@ export default {
       }
 
       if (guruRows.length === 0) {
-        return Response.json(
+        return corsJson(
           {
             status: 'error',
             message:
@@ -1630,7 +1642,16 @@ export default {
             'Content-Disposition':
               `attachment; filename="${fileName}"`,
             'Cache-Control':
-              'no-store'
+              'no-store',
+
+            'Access-Control-Allow-Origin':
+              '*',
+
+            'Access-Control-Allow-Methods':
+              'GET, OPTIONS',
+
+            'Access-Control-Allow-Headers':
+              'Content-Type'
           }
         }
       );
@@ -1641,7 +1662,7 @@ export default {
         error
       );
 
-      return Response.json(
+      return corsJson(
         {
           status: 'error',
           message:
