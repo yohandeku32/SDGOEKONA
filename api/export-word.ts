@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { connect } from '@tidbcloud/serverless';
 import { SCHOOL_CONFIG } from './school-config';
 import { Buffer } from 'node:buffer';
