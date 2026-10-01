@@ -2,12 +2,7 @@ export const runtime = 'nodejs';
 
 import { connect } from '@tidbcloud/serverless';
 import { SCHOOL_CONFIG } from './school-config';
-import {
-  corsJson,
-  fileResponse,
-  xmlEscape,
-  zipFiles,
-} from './lib/export-utils';
+import { corsJson, fileResponse, xmlEscape, zipFiles } from './lib/export-utils';
 
 type RowData = {
   id_user: string;
@@ -116,7 +111,7 @@ function buildSheet(rows: RowData[], bulan: string, tahun: string) {
   <sheetData>
     <row r="1" ht="25" customHeight="1">${cell('LAPORAN ABSENSI GURU DAN PEGAWAI', 4)}</row>
     <row r="2" ht="21" customHeight="1">${cell(SCHOOL_CONFIG.schoolName, 4)}</row>
-    <row r="3" ht="21" customHeight="1">${cell(`BULAN ${MONTHS[bulan] || bulan} ${tahun}`, 4)}</row>
+    <row r="3" ht="21" customHeight="1">${cell(`BULAN ${MONTHS[bulan] \vert{}\vert{} bulan}${tahun}`, 4)}</row>
     <row r="4">${cell('', 0)}</row>
     ${header}
     ${body.join('\n')}
@@ -206,7 +201,10 @@ export default {
       if (!databaseUrl) return corsJson({status:'error', message:'DATABASE_URL belum ditemukan di Vercel.'}, 500);
 
       const url = new URL(request.url);
-      const bulan = url.searchParams.get('bulan') || '';
+      
+      let bulan = url.searchParams.get('bulan') || '';
+      bulan = bulan.padStart(2, '0'); // Fix parameter bulan
+      
       const tahun = url.searchParams.get('tahun') || '';
       const idUser = url.searchParams.get('id_user') || '';
 
@@ -235,11 +233,15 @@ export default {
       if (idUser) { sql += ' AND a.id_user = ?'; params.push(idUser); }
       sql += ' ORDER BY g.nama ASC, a.tanggal ASC';
 
-      const rows = await conn.execute(sql, params) as RowData[];
+      // Fix format array return TiDB Serverless
+      const rawResult = await conn.execute(sql, params) as any;
+      const rows = (rawResult?.rows ? rawResult.rows : rawResult) as RowData[];
+
       if (!Array.isArray(rows) || rows.length === 0) return corsJson({status:'error', message:'Tidak ada data untuk diexport.'}, 404);
 
       const bytes = buildXlsx(rows, bulan, tahun);
       const safeId = idUser ? String(rows[0]?.name || 'Guru').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, '_') : 'Semua_Guru';
+      
       return fileResponse(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', `Absensi_${MONTHS[bulan] || bulan}_${tahun}_${safeId}.xlsx`);
     } catch (error) {
       console.error('EXPORT EXCEL ERROR:', error);
