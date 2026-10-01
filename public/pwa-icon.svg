@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="SDGOEKONA">
+  <rect width="512" height="512" rx="112" fill="#1d4ed8"/>
+  <rect x="74" y="74" width="364" height="364" rx="76" fill="#ffffff" opacity="0.98"/>
+  <path d="M112 165c45-22 92-22 144 7v190c-52-29-99-29-144-7V165Z" fill="#dbeafe"/>
+  <path d="M400 165c-45-22-92-22-144 7v190c52-29 99-29 144-7V165Z" fill="#bfdbfe"/>
+  <path d="M256 172v190" stroke="#1d4ed8" stroke-width="14" stroke-linecap="round"/>
+  <path d="M256 132 278 160h-44l22-28Z" fill="#f59e0b"/>
+  <circle cx="367" cy="131" r="32" fill="#f59e0b"/>
+  <path d="m351 131 11 11 21-24" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M141 220c34-13 67-13 101 4M141 260c34-13 67-13 101 4M271 224c34-17 67-17 101-4M271 264c34-17 67-17 101-4" fill="none" stroke="#1d4ed8" stroke-width="10" stroke-linecap="round" opacity="0.72"/>
+  <path d="M142 323c35-11 68-10 100 6M270 329c32-16 65-17 100-6" fill="none" stroke="#60a5fa" stroke-width="10" stroke-linecap="round"/>
+</svg>
