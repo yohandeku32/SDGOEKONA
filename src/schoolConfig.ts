@@ -8,7 +8,8 @@ export const SCHOOL_CONFIG = {
   headmasterIdentity: '197001162000122002',
 };
 
-// Isi dengan URL deployment Vercel untuk sekolah ini sebelum build/deploy.
+// Frontend selalu menggunakan API pada domain yang sedang dibuka.
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  'https://sdgoekona-one.vercel.app';
+  typeof window !== 'undefined'
+    ? window.location.origin
+    : 'https://sdgoekona-one.vercel.app';
