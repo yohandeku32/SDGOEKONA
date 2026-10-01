@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { connect } from '@tidbcloud/serverless';
 
 type AbsenStatus = 'MASUK' | 'PULANG';
@@ -23,9 +25,11 @@ function getCorsHeaders(
     request.headers.get('Origin') || '';
 
   const allowedOrigin =
-    ALLOWED_ORIGINS.has(origin)
-      ? origin
-      : '*';
+    ALLOWED_ORIGINS.has('*')
+      ? '*'
+      : ALLOWED_ORIGINS.has(origin)
+        ? origin
+        : '*';
 
   return {
     'Access-Control-Allow-Origin':
