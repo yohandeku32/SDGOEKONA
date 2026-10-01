@@ -130,22 +130,18 @@ async function fetchPhotoBatch(
     })
   });
 
-  if (!response.ok) {
-    throw new Error(
-      `Apps Script mengembalikan HTTP ${response.status}.`
-    );
-  }
-
   const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Apps Script mengembalikan HTTP ${response.status}.`);
+  }
 
   let result: PhotoBatchPayload;
 
   try {
     result = JSON.parse(text) as PhotoBatchPayload;
   } catch {
-    throw new Error(
-      `Response foto dari Apps Script bukan JSON (HTTP ${response.status}).`
-    );
+    throw new Error('Response foto dari Apps Script bukan JSON.');
   }
 
   if (result.status !== 'success' || !Array.isArray(result.photos)) {
@@ -158,8 +154,8 @@ async function fetchPhotoBatch(
   return result.photos;
 }
 
-const PHOTO_BATCH_SIZE = 20;
-const PHOTO_CONCURRENCY = 3;
+const PHOTO_BATCH_SIZE = 10;
+const PHOTO_CONCURRENCY = 1;
 
 async function fetchPhotoBatchWithRetry(
   appsScriptUrl: string,
