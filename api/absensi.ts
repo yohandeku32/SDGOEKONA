@@ -79,8 +79,7 @@ function json(
 // API UTAMA
 // ======================================================
 
-export default {
-  async fetch(request: Request) {
+async function handleRequest(request: Request) {
 
     // ==================================================
     // CORS PREFLIGHT
