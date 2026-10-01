@@ -1,4 +1,4 @@
-\export const runtime = 'nodejs';
+export const runtime = 'nodejs';
 
 import { connect } from '@tidbcloud/serverless';
 import { verifyPassword } from './lib/password';
