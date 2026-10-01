@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 import { connect } from '@tidbcloud/serverless';
 import { SCHOOL_CONFIG, LOGO_KABUPATEN_URL, LOGO_TUT_WURI_URL } from './school-config';
 import {
