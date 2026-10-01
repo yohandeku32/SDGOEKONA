@@ -11,11 +11,9 @@ import SuccessModal from './components/SuccessModal';
 import { API_BASE_URL } from './schoolConfig';
 
 const SESSION_STORAGE_KEY = 'sdgoekona_session_v1';
-const SESSION_DURATION_MS = 30 * 60 * 1000;
 
 type StoredSession = {
   user: User;
-  expiresAt: number;
 };
 
 function readStoredSession(): StoredSession | null {
@@ -26,15 +24,15 @@ function readStoredSession(): StoredSession | null {
 
     if (!raw) return null;
 
-    const session = JSON.parse(raw) as StoredSession;
+    const session = JSON.parse(raw) as {
+      user?: User | null;
+    };
 
     if (
       !session ||
       !session.user ||
       !session.user.id ||
-      !session.user.role ||
-      !session.expiresAt ||
-      session.expiresAt <= Date.now()
+      !session.user.role
     ) {
       window.localStorage.removeItem(
         SESSION_STORAGE_KEY
@@ -42,7 +40,12 @@ function readStoredSession(): StoredSession | null {
       return null;
     }
 
-    return session;
+    // Sesi tidak memiliki batas waktu.
+    // Selama data sesi masih tersimpan di browser,
+    // pengguna tetap login sampai menekan tombol Keluar.
+    return {
+      user: session.user
+    };
   } catch {
     window.localStorage.removeItem(
       SESSION_STORAGE_KEY
@@ -76,7 +79,9 @@ export default function App() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Pertahankan sesi saat refresh dan otomatis keluar setelah 30 menit.
+  // Pertahankan sesi login tanpa batas waktu.
+  // Sesi hanya berakhir ketika pengguna menekan tombol Keluar
+  // atau data sesi di browser dihapus secara manual.
   useEffect(() => {
     if (!currentUser) {
       return;
@@ -87,27 +92,7 @@ export default function App() {
 
     if (!stored) {
       setCurrentUser(null);
-      return;
     }
-
-    const remaining =
-      Math.max(
-        0,
-        stored.expiresAt - Date.now()
-      );
-
-    const timer =
-      window.setTimeout(() => {
-        window.localStorage.removeItem(
-          SESSION_STORAGE_KEY
-        );
-        setCurrentUser(null);
-        setGlobalDatabase([]);
-      }, remaining);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
   }, [currentUser]);
 
   // Fetch database whenever currentUser exists
@@ -235,10 +220,7 @@ export default function App() {
 
   const handleLoginSuccess = (user: User) => {
     const session: StoredSession = {
-      user,
-      expiresAt:
-        Date.now() +
-        SESSION_DURATION_MS
+      user
     };
 
     window.localStorage.setItem(
