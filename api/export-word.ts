@@ -41,7 +41,7 @@ function documentXml(rows:RowData[], bulan:string, tahun:string) {
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
 ${para('LAPORAN ABSENSI GURU DAN PEGAWAI',true,28,true)}
 ${para(SCHOOL_CONFIG.schoolName,true,24,true)}
-${para(`BULAN ${(MONTHS[bulan]||bulan).toUpperCase()} ${tahun}`,true,20,true)}
+${para(`BULAN ${(MONTHS[bulan]\vert{}\vert{}bulan).toUpperCase()}${tahun}`,true,20,true)}
 ${tbl}
 ${para(note,false,16,false)}
 <w:sectPr><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="400" w:right="400" w:bottom="400" w:left="400"/></w:sectPr>
@@ -59,13 +59,33 @@ export default { async fetch(request:Request) {
  if(request.method!=='GET') return corsJson({status:'error',message:'Method tidak didukung.'},405);
  try{
   const databaseUrl=process.env.DATABASE_URL; if(!databaseUrl) return corsJson({status:'error',message:'DATABASE_URL belum ditemukan di Vercel.'},500);
-  const url=new URL(request.url); const bulan=url.searchParams.get('bulan')||''; const tahun=url.searchParams.get('tahun')||''; const idUser=url.searchParams.get('id_user')||'';
+  const url=new URL(request.url); 
+  
+  let bulan=url.searchParams.get('bulan')||''; 
+  bulan = bulan.padStart(2, '0'); // Fix parameter bulan
+  
+  const tahun=url.searchParams.get('tahun')||''; 
+  const idUser=url.searchParams.get('id_user')||'';
+  
   if(!/^(0[1-9]|1[0-2])$/.test(bulan)) return corsJson({status:'error',message:'Parameter bulan tidak valid.'},400);
   if(!/^\d{4}$/.test(tahun)) return corsJson({status:'error',message:'Parameter tahun tidak valid.'},400);
-  const conn=connect({url:databaseUrl}); let sql=`SELECT a.id_user,g.nama AS name,DATE_FORMAT(a.tanggal,'%Y-%m-%d') AS date,CASE WHEN a.jam_masuk IS NOT NULL AND a.jam_pulang IS NOT NULL THEN CONCAT(TIME_FORMAT(a.jam_masuk,'%H:%i'),' - ',TIME_FORMAT(a.jam_pulang,'%H:%i')) WHEN a.jam_masuk IS NOT NULL THEN TIME_FORMAT(a.jam_masuk,'%H:%i') WHEN a.jam_pulang IS NOT NULL THEN TIME_FORMAT(a.jam_pulang,'%H:%i') ELSE '' END AS time,TIME_FORMAT(a.jam_masuk,'%H:%i') AS jam_masuk,TIME_FORMAT(a.jam_pulang,'%H:%i') AS jam_pulang,a.status,a.keterangan,a.foto_masuk_file_id,a.foto_pulang_file_id,g.nip,g.nik,g.status_kepegawaian,g.golongan_ruang,g.jabatan FROM absensi a INNER JOIN guru g ON g.id_user=a.id_user WHERE g.aktif=1 AND MONTH(a.tanggal)=? AND YEAR(a.tanggal)=?`;
-  const params:(string|number)[]=[Number(bulan),Number(tahun)]; if(idUser){sql+=' AND a.id_user=?';params.push(idUser);} sql+=' ORDER BY g.nama ASC,a.tanggal ASC';
-  const rows=await conn.execute(sql,params) as RowData[]; if(!Array.isArray(rows)||rows.length===0) return corsJson({status:'error',message:'Tidak ada data untuk diexport.'},404);
-  const bytes=buildDocx(rows,bulan,tahun); const name=idUser?String(rows[0]?.name||'Guru').replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,'_'):'Semua_Guru';
+  
+  const conn=connect({url:databaseUrl}); 
+  let sql=`SELECT a.id_user,g.nama AS name,DATE_FORMAT(a.tanggal,'%Y-%m-%d') AS date,CASE WHEN a.jam_masuk IS NOT NULL AND a.jam_pulang IS NOT NULL THEN CONCAT(TIME_FORMAT(a.jam_masuk,'%H:%i'),' - ',TIME_FORMAT(a.jam_pulang,'%H:%i')) WHEN a.jam_masuk IS NOT NULL THEN TIME_FORMAT(a.jam_masuk,'%H:%i') WHEN a.jam_pulang IS NOT NULL THEN TIME_FORMAT(a.jam_pulang,'%H:%i') ELSE '' END AS time,TIME_FORMAT(a.jam_masuk,'%H:%i') AS jam_masuk,TIME_FORMAT(a.jam_pulang,'%H:%i') AS jam_pulang,a.status,a.keterangan,a.foto_masuk_file_id,a.foto_pulang_file_id,g.nip,g.nik,g.status_kepegawaian,g.golongan_ruang,g.jabatan FROM absensi a INNER JOIN guru g ON g.id_user=a.id_user WHERE g.aktif=1 AND MONTH(a.tanggal)=? AND YEAR(a.tanggal)=?`;
+  
+  const params:(string|number)[]=[Number(bulan),Number(tahun)]; 
+  if(idUser){sql+=' AND a.id_user=?';params.push(idUser);} 
+  sql+=' ORDER BY g.nama ASC,a.tanggal ASC';
+  
+  // Fix format array return TiDB Serverless
+  const rawResult = await conn.execute(sql,params) as any; 
+  const rows = (rawResult?.rows ? rawResult.rows : rawResult) as RowData[];
+  
+  if(!Array.isArray(rows)||rows.length===0) return corsJson({status:'error',message:'Tidak ada data untuk diexport.'},404);
+  
+  const bytes=buildDocx(rows,bulan,tahun); 
+  const name=idUser?String(rows[0]?.name||'Guru').replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,'_'):'Semua_Guru';
+  
   return fileResponse(bytes,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',`Absensi_${MONTHS[bulan]||bulan}_${tahun}_${name}.docx`);
  }catch(error){console.error('EXPORT WORD ERROR:',error);return corsJson({status:'error',message:error instanceof Error?error.message:String(error)},500);}
 }};
