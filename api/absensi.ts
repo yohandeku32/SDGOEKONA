@@ -1534,8 +1534,8 @@ async function handleRequest(request: Request) {
         500
       );
     }
-  },
-};
+  }
+}
 
 
 
