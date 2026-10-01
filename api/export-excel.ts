@@ -1,5 +1,3 @@
-export const runtime = 'nodejs';
-
 import { connect } from '@tidbcloud/serverless';
 import { SCHOOL_CONFIG } from './school-config';
 import ExcelJS from 'exceljs';
@@ -53,8 +51,22 @@ const MONTHS: Record<string, string> = {
   '12': 'Desember'
 };
 
+
+function corsJson(data: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  headers.set('Cache-Control', 'no-store');
+
+  return Response.json(data, {
+    ...init,
+    headers
+  });
+}
+
 function badRequest(message: string) {
-  return Response.json(
+  return corsJson(
     { status: 'error', message },
     { status: 400 }
   );
@@ -132,10 +144,6 @@ async function fetchPhotoBatch(
 
   const text = await response.text();
 
-  if (!response.ok) {
-    throw new Error(`Apps Script mengembalikan HTTP ${response.status}.`);
-  }
-
   let result: PhotoBatchPayload;
 
   try {
@@ -154,8 +162,8 @@ async function fetchPhotoBatch(
   return result.photos;
 }
 
-const PHOTO_BATCH_SIZE = 10;
-const PHOTO_CONCURRENCY = 1;
+const PHOTO_BATCH_SIZE = 20;
+const PHOTO_CONCURRENCY = 3;
 
 async function fetchPhotoBatchWithRetry(
   appsScriptUrl: string,
@@ -363,7 +371,7 @@ function streamBytes(bytes: Uint8Array) {
 export default {
   async fetch(request: Request) {
     if (request.method !== 'GET') {
-      return Response.json(
+      return corsJson(
         {
           status: 'error',
           message: 'Method tidak didukung.'
@@ -380,7 +388,7 @@ export default {
         process.env.APPS_SCRIPT_URL;
 
       if (!databaseUrl) {
-        return Response.json(
+        return corsJson(
           {
             status: 'error',
             message:
@@ -391,7 +399,7 @@ export default {
       }
 
       if (!appsScriptUrl) {
-        return Response.json(
+        return corsJson(
           {
             status: 'error',
             message:
@@ -525,7 +533,7 @@ export default {
         !Array.isArray(rows) ||
         rows.length === 0
       ) {
-        return Response.json(
+        return corsJson(
           {
             status: 'error',
             message:
@@ -984,7 +992,16 @@ export default {
               `attachment; filename="${fileName}"`,
 
             'Cache-Control':
-              'no-store'
+              'no-store',
+
+            'Access-Control-Allow-Origin':
+              '*',
+
+            'Access-Control-Allow-Methods':
+              'GET, OPTIONS',
+
+            'Access-Control-Allow-Headers':
+              'Content-Type'
           }
         }
       );
@@ -995,7 +1012,7 @@ export default {
         error
       );
 
-      return Response.json(
+      return corsJson(
         {
           status: 'error',
           message:
