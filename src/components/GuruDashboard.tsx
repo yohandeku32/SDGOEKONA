@@ -91,14 +91,14 @@ export default function GuruDashboard({
         {/* Dashboard Header */}
         <header className="p-6 flex items-center justify-between border-b border-slate-100 bg-white sticky top-0 z-10">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center border border-emerald-100 text-emerald-600">
+            <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-700">
               <UserIcon className="w-5 h-5" />
             </div>
             <div className="max-w-[200px]">
               <h2 className="font-display font-extrabold text-slate-900 leading-tight truncate">
                 {user.name}
               </h2>
-              <p className="text-[9px] font-sans font-black text-emerald-600 uppercase tracking-widest leading-none mt-1">
+              <p className="text-[9px] font-sans font-black text-blue-700 uppercase tracking-widest leading-none mt-1">
                 {user.role === 'kepsek' ? 'Kepala Sekolah' : user.role === 'pegawai' ? 'Pegawai / TU' : 'Guru Kelas'}
               </p>
             </div>
@@ -114,9 +114,9 @@ export default function GuruDashboard({
 
         <main className="flex-1 p-6 space-y-6">
           {/* Greeting Banner */}
-          <div className="bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-900 p-6 rounded-[2rem] text-white shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl translate-x-1/3 -translate-y-1/3" />
-            <p className="font-sans font-bold text-emerald-400 text-xs tracking-wider uppercase mb-1">
+          <div className="bg-gradient-to-tr from-blue-950 via-blue-900 to-slate-900 p-6 rounded-[2rem] text-white shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl translate-x-1/3 -translate-y-1/3" />
+            <p className="font-sans font-bold text-sky-300 text-xs tracking-wider uppercase mb-1">
               Hari ini • {dateStr}
             </p>
             <h3 className="font-display font-black text-xl tracking-tight text-white">
@@ -125,7 +125,7 @@ export default function GuruDashboard({
             
             {/* Live Clock Display */}
             <div className="mt-4 flex items-center gap-2 text-white/95">
-              <Clock className="w-4 h-4 text-emerald-400 shrink-0 animate-pulse" />
+              <Clock className="w-4 h-4 text-sky-300 shrink-0 animate-pulse" />
               <span className="font-mono font-bold text-sm bg-white/10 px-3 py-1 rounded-full border border-white/10">
                 {timeStr || 'Memuat waktu...'}
               </span>
@@ -134,12 +134,12 @@ export default function GuruDashboard({
             {/* Quick Status Badges */}
             <div className="mt-4 flex flex-wrap gap-2 pt-4 border-t border-white/10">
               <span className={`px-3 py-1.5 rounded-full text-[9px] font-bold border font-sans uppercase tracking-wider ${
-                dataMasuk ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/20' : 'bg-white/5 text-white/50 border-white/5'
+                dataMasuk ? 'bg-blue-500/20 text-sky-200 border-sky-400/20' : 'bg-white/5 text-white/50 border-white/5'
               }`}>
                 Masuk: {jamMasuk || '--:--'}
               </span>
               <span className={`px-3 py-1.5 rounded-full text-[9px] font-bold border font-sans uppercase tracking-wider ${
-                dataPulang ? 'bg-orange-500/20 text-orange-300 border-orange-500/20' : 'bg-white/5 text-white/50 border-white/5'
+                dataPulang ? 'bg-amber-400/20 text-amber-200 border-amber-400/20' : 'bg-white/5 text-white/50 border-white/5'
               }`}>
                 Pulang: {jamPulang || '--:--'}
               </span>
@@ -151,25 +151,25 @@ export default function GuruDashboard({
             
             {/* ABSEN MASUK BUTTON */}
             {dataMasuk ? (
-              <div className="p-6 bg-slate-50 border border-emerald-100 rounded-[2rem] flex justify-between items-center opacity-85">
+              <div className="p-6 bg-slate-50 border border-blue-100 rounded-[2rem] flex justify-between items-center opacity-85">
                 <div>
-                  <h3 className="font-display font-black text-emerald-600 text-lg">Absen Masuk Berhasil</h3>
+                  <h3 className="font-display font-black text-blue-700 text-lg">Absen Masuk Berhasil</h3>
                   <p className="text-slate-400 text-xs font-semibold font-sans mt-0.5">
                     Sudah absen pukul {jamMasuk || '-'} WITA
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-2xl flex items-center justify-center">
                   <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
                 </div>
               </div>
             ) : (
               <button
                 onClick={() => onTriggerAbsen('MASUK')}
-                className="w-full p-6 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-[2rem] text-left flex justify-between items-center shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/35 hover:-translate-y-1 transition-all duration-300 active:scale-98 cursor-pointer border-none"
+                className="w-full p-6 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-[2rem] text-left flex justify-between items-center shadow-lg shadow-blue-600/20 hover:shadow-blue-600/35 hover:-translate-y-1 transition-all duration-300 active:scale-98 cursor-pointer border-none"
               >
                 <div>
                   <h3 className="font-display font-black text-white text-lg">Absen Masuk</h3>
-                  <p className="text-emerald-50 text-xs font-medium font-sans opacity-90 mt-0.5">
+                  <p className="text-blue-50 text-xs font-medium font-sans opacity-90 mt-0.5">
                     Ketuk untuk mengambil foto &amp; kirim
                   </p>
                 </div>
@@ -181,25 +181,25 @@ export default function GuruDashboard({
 
             {/* ABSEN PULANG BUTTON */}
             {dataPulang ? (
-              <div className="p-6 bg-slate-50 border border-emerald-100 rounded-[2rem] flex justify-between items-center opacity-85">
+              <div className="p-6 bg-slate-50 border border-blue-100 rounded-[2rem] flex justify-between items-center opacity-85">
                 <div>
-                  <h3 className="font-display font-black text-orange-600 text-lg">Absen Pulang Berhasil</h3>
+                  <h3 className="font-display font-black text-amber-700 text-lg">Absen Pulang Berhasil</h3>
                   <p className="text-slate-400 text-xs font-semibold font-sans mt-0.5">
                     Sudah absen pukul {jamPulang || '-'} WITA
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center">
                   <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
                 </div>
               </div>
             ) : (
               <button
                 onClick={() => onTriggerAbsen('PULANG')}
-                className="w-full p-6 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-[2rem] text-left flex justify-between items-center shadow-lg shadow-orange-500/20 hover:shadow-orange-500/35 hover:-translate-y-1 transition-all duration-300 active:scale-98 cursor-pointer border-none"
+                className="w-full p-6 bg-gradient-to-br from-amber-500 to-orange-500 text-white rounded-[2rem] text-left flex justify-between items-center shadow-lg shadow-amber-500/20 hover:shadow-amber-500/35 hover:-translate-y-1 transition-all duration-300 active:scale-98 cursor-pointer border-none"
               >
                 <div>
                   <h3 className="font-display font-black text-white text-lg">Absen Pulang</h3>
-                  <p className="text-orange-50 text-xs font-medium font-sans opacity-90 mt-0.5">
+                  <p className="text-amber-50 text-xs font-medium font-sans opacity-90 mt-0.5">
                     Bisa dikirim meski belum absen masuk
                   </p>
                 </div>
@@ -215,7 +215,7 @@ export default function GuruDashboard({
           <div className="space-y-4 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
               <h3 className="font-display font-extrabold text-slate-800 text-base flex items-center gap-2">
-                <FileText className="w-5 h-5 text-emerald-500" />
+                <FileText className="w-5 h-5 text-blue-600" />
                 Aktivitas Absen Hari Ini
               </h3>
               <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-1 rounded-full font-sans uppercase">
@@ -233,7 +233,7 @@ export default function GuruDashboard({
                       className="flex items-center gap-4 p-4 bg-slate-50/50 hover:bg-slate-50 rounded-2xl border border-slate-100 shadow-sm transition-all"
                     >
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-display font-black text-xs ${
-                        isMasuk ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'
+                        isMasuk ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                       }`}>
                         {isMasuk ? 'M' : 'P'}
                       </div>
@@ -245,7 +245,7 @@ export default function GuruDashboard({
                           {log.time} WITA
                         </p>
                       </div>
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                      <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0" />
                     </div>
                   );
                 })
