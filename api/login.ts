@@ -1,5 +1,3 @@
-export const runtime = 'nodejs';
-
 import { connect } from '@tidbcloud/serverless';
 import { verifyPassword } from './lib/password';
 
@@ -36,7 +34,8 @@ function json(request: Request, data: unknown, status = 200) {
   });
 }
 
-export default async function handler(request: Request) {
+export default {
+  async fetch(request: Request) {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -181,4 +180,5 @@ export default async function handler(request: Request) {
         500
       );
     }
-}
+  },
+};
