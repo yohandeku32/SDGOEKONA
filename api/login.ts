@@ -34,131 +34,91 @@ function json(request: Request, data: unknown, status = 200) {
   });
 }
 
-export default {
-  async fetch(request: Request) {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: getCorsHeaders(request),
-      });
-    }
+// Konfigurasi ini memberitahu Vercel untuk menggunakan Edge Runtime
+export const config = {
+  runtime: 'edge',
+};
 
-    if (request.method !== 'POST') {
+// Menggunakan format fungsi standar untuk Vercel Edge Function
+export default async function handler(request: Request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: getCorsHeaders(request),
+    });
+  }
+
+  if (request.method !== 'POST') {
+    return json(
+      request,
+      { status: 'error', message: 'Method tidak didukung.' },
+      405
+    );
+  }
+
+  try {
+    const databaseUrl = process.env.DATABASE_URL;
+
+    if (!databaseUrl) {
       return json(
         request,
-        { status: 'error', message: 'Method tidak didukung.' },
-        405
+        {
+          status: 'error',
+          message: 'DATABASE_URL belum ditemukan di Vercel.',
+        },
+        500
       );
     }
 
+    let body: unknown;
     try {
-      const databaseUrl = process.env.DATABASE_URL;
+      body = await request.json();
+    } catch {
+      return json(
+        request,
+        { status: 'error', message: 'Body request bukan JSON yang valid.' },
+        400
+      );
+    }
 
-      if (!databaseUrl) {
-        return json(
-          request,
-          {
-            status: 'error',
-            message: 'DATABASE_URL belum ditemukan di Vercel.',
-          },
-          500
-        );
-      }
+    const payload = (body && typeof body === 'object') ? body as Record<string, unknown> : {};
+    const username = String(payload.username ?? payload.id ?? '').trim();
+    const password = String(payload.password ?? '');
+    const role = String(payload.role ?? '').trim().toLowerCase();
 
-      let body: unknown;
-      try {
-        body = await request.json();
-      } catch {
-        return json(
-          request,
-          { status: 'error', message: 'Body request bukan JSON yang valid.' },
-          400
-        );
-      }
+    if (!username || !password || !role) {
+      return json(
+        request,
+        {
+          status: 'error',
+          message: 'Username, password, dan peran wajib diisi.',
+        },
+        400
+      );
+    }
 
-      const payload = (body && typeof body === 'object') ? body as Record<string, unknown> : {};
-      const username = String(payload.username ?? payload.id ?? '').trim();
-      const password = String(payload.password ?? '');
-      const role = String(payload.role ?? '').trim().toLowerCase();
+    const allowedRoles = new Set(['admin', 'kepsek', 'guru', 'pegawai']);
+    if (!allowedRoles.has(role)) {
+      return json(
+        request,
+        { status: 'error', message: 'Peran tidak valid.' },
+        400
+      );
+    }
 
-      if (!username || !password || !role) {
-        return json(
-          request,
-          {
-            status: 'error',
-            message: 'Username, password, dan peran wajib diisi.',
-          },
-          400
-        );
-      }
+    const conn = connect({ url: databaseUrl });
 
-      const allowedRoles = new Set(['admin', 'kepsek', 'guru', 'pegawai']);
-      if (!allowedRoles.has(role)) {
-        return json(
-          request,
-          { status: 'error', message: 'Peran tidak valid.' },
-          400
-        );
-      }
-
-      const conn = connect({ url: databaseUrl });
-
-      if (role === 'admin') {
-        const rows = await conn.execute(
-          `
-            SELECT id_user, nama, role, password_hash, aktif
-            FROM system_users
-            WHERE LOWER(id_user) = LOWER(?)
-              AND role = 'admin'
-              AND aktif = 1
-            LIMIT 1
-          `,
-          [username]
-        );
-
-        if (!Array.isArray(rows) || rows.length === 0) {
-          return json(
-            request,
-            { status: 'error', message: 'Username atau password salah.' },
-            401
-          );
-        }
-
-        const account = rows[0] as Record<string, unknown>;
-        const valid = await verifyPassword(
-          password,
-          String(account.password_hash ?? '')
-        );
-
-        if (!valid) {
-          return json(
-            request,
-            { status: 'error', message: 'Username atau password salah.' },
-            401
-          );
-        }
-
-        return json(request, {
-          status: 'success',
-          message: 'Login berhasil.',
-          user: {
-            id: String(account.id_user),
-            name: String(account.nama),
-            role: String(account.role),
-          },
-        });
-      }
-
+    if (role === 'admin') {
       const rows = await conn.execute(
         `
           SELECT id_user, nama, role, password_hash, aktif
-          FROM guru
+          FROM system_users
           WHERE LOWER(id_user) = LOWER(?)
-            AND role = ?
+            AND role = 'admin'
             AND aktif = 1
           LIMIT 1
         `,
-        [username, role]
+        [username]
       );
 
       if (!Array.isArray(rows) || rows.length === 0) {
@@ -192,17 +152,61 @@ export default {
           role: String(account.role),
         },
       });
-    } catch (error) {
-      console.error('LOGIN API ERROR:', error);
+    }
 
+    const rows = await conn.execute(
+      `
+        SELECT id_user, nama, role, password_hash, aktif
+        FROM guru
+        WHERE LOWER(id_user) = LOWER(?)
+          AND role = ?
+          AND aktif = 1
+        LIMIT 1
+      `,
+      [username, role]
+    );
+
+    if (!Array.isArray(rows) || rows.length === 0) {
       return json(
         request,
-        {
-          status: 'error',
-          message: 'Terjadi kesalahan pada server login.',
-        },
-        500
+        { status: 'error', message: 'Username atau password salah.' },
+        401
       );
     }
-  },
-};
+
+    const account = rows[0] as Record<string, unknown>;
+    const valid = await verifyPassword(
+      password,
+      String(account.password_hash ?? '')
+    );
+
+    if (!valid) {
+      return json(
+        request,
+        { status: 'error', message: 'Username atau password salah.' },
+        401
+      );
+    }
+
+    return json(request, {
+      status: 'success',
+      message: 'Login berhasil.',
+      user: {
+        id: String(account.id_user),
+        name: String(account.nama),
+        role: String(account.role),
+      },
+    });
+  } catch (error) {
+    console.error('LOGIN API ERROR:', error);
+
+    return json(
+      request,
+      {
+        status: 'error',
+        message: 'Terjadi kesalahan pada server login.',
+      },
+      500
+    );
+  }
+}
