@@ -2,8 +2,6 @@ export const runtime = 'nodejs';
 
 import { connect } from '@tidbcloud/serverless';
 import * as ExcelJS from 'exceljs';
-import { SCHOOL_CONFIG } from './school-config';
-
 type RowData = {
   id_user: string;
   name: string;
@@ -266,7 +264,7 @@ async function buildExcel(
     'LAPORAN ABSENSI GURU DAN PEGAWAI';
 
   worksheet.getCell('A2').value =
-    SCHOOL_CONFIG.schoolName;
+    'SD GMIT OEKONA';
 
   worksheet.getCell('A3').value =
     `BULAN ${MONTHS[bulan] || bulan} ${tahun}`;
