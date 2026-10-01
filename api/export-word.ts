@@ -54,8 +54,15 @@ const MONTHS: Record<string, string> = {
 };
 
 const PHOTO_BATCH_SIZE = 25;
-const MAX_IMAGE_WIDTH_EMU = 1200000;
-const MAX_IMAGE_HEIGHT_EMU = 1200000;
+
+// Ukuran maksimum foto tetap proporsional terhadap foto asli.
+// Kolom foto dibuat cukup longgar agar foto tidak menempel pada garis tabel.
+const PHOTO_COLUMN_WIDTH_TWIPS = 2600;
+const PHOTO_COLUMN_HORIZONTAL_PADDING_TWIPS = 110;
+const PHOTO_COLUMN_VERTICAL_PADDING_TWIPS = 120;
+
+const MAX_IMAGE_WIDTH_EMU = 1520000;
+const MAX_IMAGE_HEIGHT_EMU = 2650000;
 
 function headers() {
   return {
@@ -743,6 +750,23 @@ function imageSizeEmu(
   };
 }
 
+function photoRowHeightTwips(
+  photo?: PhotoData
+) {
+  if (!photo) {
+    return 0;
+  }
+
+  const size = imageSizeEmu(photo);
+
+  // 1 twip = 635 EMU.
+  // Tambahkan sedikit ruang atas/bawah agar foto tidak pas menempel.
+  return (
+    Math.ceil(size.height / 635) +
+    PHOTO_COLUMN_VERTICAL_PADDING_TWIPS
+  );
+}
+
 function imageDrawing(
   relationId: string,
   photo: PhotoData,
@@ -1097,7 +1121,7 @@ function photoCell(
         true,
         15
       ),
-      1450,
+      PHOTO_COLUMN_WIDTH_TWIPS,
       {
         vertical: 'center'
       }
@@ -1131,13 +1155,12 @@ function photoCell(
         ${drawing}
       </w:r>
     </w:p>`,
-    1450,
+    PHOTO_COLUMN_WIDTH_TWIPS,
     {
       vertical: 'center'
     }
   );
 }
-
 function tableRow(
   cells: string[],
   height: number,
@@ -1237,7 +1260,7 @@ function buildDocumentXml(
             17,
             true
           ),
-          700,
+          550,
           {
             shading:
               'E2E8F0'
@@ -1250,7 +1273,7 @@ function buildDocumentXml(
             17,
             true
           ),
-          3900,
+          3750,
           {
             shading:
               'E2E8F0'
@@ -1263,7 +1286,7 @@ function buildDocumentXml(
             17,
             true
           ),
-          1200,
+          1100,
           {
             shading:
               'E2E8F0'
@@ -1276,20 +1299,7 @@ function buildDocumentXml(
             17,
             true
           ),
-          1650,
-          {
-            shading:
-              'E2E8F0'
-          }
-        ),
-        tableCell(
-          tableParagraph(
-            'Status',
-            true,
-            17,
-            true
-          ),
-          1700,
+          1450,
           {
             shading:
               'E2E8F0'
@@ -1302,7 +1312,7 @@ function buildDocumentXml(
             17,
             true
           ),
-          2500,
+          3000,
           {
             shading:
               'E2E8F0'
@@ -1315,7 +1325,7 @@ function buildDocumentXml(
             17,
             true
           ),
-          1450,
+          PHOTO_COLUMN_WIDTH_TWIPS,
           {
             shading:
               'E2E8F0'
@@ -1328,7 +1338,7 @@ function buildDocumentXml(
             17,
             true
           ),
-          1450,
+          PHOTO_COLUMN_WIDTH_TWIPS,
           {
             shading:
               'E2E8F0'
@@ -1364,7 +1374,7 @@ function buildDocumentXml(
                 18,
                 true
               ),
-              700,
+              550,
               {
                 vertical:
                   'top',
@@ -1381,7 +1391,7 @@ function buildDocumentXml(
               identityBlock(
                 group
               ),
-              3900,
+              3750,
               {
                 vertical:
                   'top',
@@ -1429,7 +1439,7 @@ function buildDocumentXml(
               true,
               16
             ),
-            1200
+            1100
           )
         );
 
@@ -1440,19 +1450,7 @@ function buildDocumentXml(
               true,
               16
             ),
-            1650
-          )
-        );
-
-        cells.push(
-          tableCell(
-            tableParagraph(
-              record.status ||
-                '-',
-              true,
-              16
-            ),
-            1700
+            1450
           )
         );
 
@@ -1464,7 +1462,7 @@ function buildDocumentXml(
               false,
               16
             ),
-            2500,
+            3000,
             {
               vertical:
                 'top'
@@ -1512,12 +1510,23 @@ function buildDocumentXml(
           )
         );
 
+        const photoRowHeight =
+          Math.max(
+            photoRowHeightTwips(
+              photoIn
+            ),
+            photoRowHeightTwips(
+              photoOut
+            )
+          );
+
         rows.push(
           tableRow(
             cells,
-            photoIn || photoOut
-              ? 1050
-              : 650
+            Math.max(
+              650,
+              photoRowHeight
+            )
           )
         );
       }
@@ -1597,14 +1606,13 @@ function buildDocumentXml(
       </w:tblPr>
 
       <w:tblGrid>
-        <w:gridCol w:w="700"/>
-        <w:gridCol w:w="3900"/>
-        <w:gridCol w:w="1200"/>
-        <w:gridCol w:w="1650"/>
-        <w:gridCol w:w="1700"/>
-        <w:gridCol w:w="2500"/>
+        <w:gridCol w:w="550"/>
+        <w:gridCol w:w="3750"/>
+        <w:gridCol w:w="1100"/>
         <w:gridCol w:w="1450"/>
-        <w:gridCol w:w="1450"/>
+        <w:gridCol w:w="3000"/>
+        <w:gridCol w:w="${PHOTO_COLUMN_WIDTH_TWIPS}"/>
+        <w:gridCol w:w="${PHOTO_COLUMN_WIDTH_TWIPS}"/>
       </w:tblGrid>
 
       ${rows.join('')}
