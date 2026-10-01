@@ -54,8 +54,8 @@ const MONTHS: Record<string, string> = {
 };
 
 const PHOTO_BATCH_SIZE = 25;
-const MAX_IMAGE_WIDTH_EMU = 900000;
-const MAX_IMAGE_HEIGHT_EMU = 900000;
+const MAX_IMAGE_WIDTH_EMU = 1200000;
+const MAX_IMAGE_HEIGHT_EMU = 1200000;
 
 function headers() {
   return {
