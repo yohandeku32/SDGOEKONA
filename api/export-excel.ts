@@ -1,7 +1,87 @@
 export const runtime = 'nodejs';
 
 import { connect } from '@tidbcloud/serverless';
-import { corsJson, fileResponse, xmlEscape, zipFiles } from './lib/export-utils';
+import JSZip from 'jszip';
+
+
+function xmlEscape(value: unknown): string {
+  if (value === null || value === undefined) return '';
+
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function jsonResponse(
+  data: unknown,
+  status = 200
+) {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        'Content-Type':
+          'application/json; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods':
+          'GET, OPTIONS',
+        'Access-Control-Allow-Headers':
+          'Content-Type',
+        'Cache-Control':
+          'no-store',
+      },
+    }
+  );
+}
+
+function fileResponse(
+  data: Uint8Array,
+  mimeType: string,
+  filename: string
+) {
+  return new Response(data, {
+    status: 200,
+    headers: {
+      'Content-Type': mimeType,
+      'Content-Disposition':
+        `attachment; filename="${filename}"`,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods':
+        'GET, OPTIONS',
+      'Cache-Control':
+        'no-store',
+    },
+  });
+}
+
+async function zipFiles(
+  files: Array<{
+    name: string;
+    data: string;
+  }>
+) {
+  const zip =
+    new JSZip();
+
+  for (const file of files) {
+    zip.file(
+      file.name,
+      file.data
+    );
+  }
+
+  return zip.generateAsync({
+    type: 'uint8array',
+    compression: 'DEFLATE',
+    compressionOptions: {
+      level: 6,
+    },
+  });
+}
 
 type RowData = {
   id_user: string;
@@ -547,11 +627,11 @@ async function handleExport(
   request: Request
 ) {
   if (request.method === 'OPTIONS') {
-    return corsJson(null, 204);
+    return jsonResponse(null, 204);
   }
 
   if (request.method !== 'GET') {
-    return corsJson(
+    return jsonResponse(
       {
         status: 'error',
         message: 'Method tidak didukung.',
@@ -565,7 +645,7 @@ async function handleExport(
       process.env.DATABASE_URL;
 
     if (!databaseUrl) {
-      return corsJson(
+      return jsonResponse(
         {
           status: 'error',
           message:
@@ -598,7 +678,7 @@ async function handleExport(
         bulan
       )
     ) {
-      return corsJson(
+      return jsonResponse(
         {
           status: 'error',
           message:
@@ -611,7 +691,7 @@ async function handleExport(
     if (
       !/^\d{4}$/.test(tahun)
     ) {
-      return corsJson(
+      return jsonResponse(
         {
           status: 'error',
           message:
@@ -755,7 +835,7 @@ async function handleExport(
       !Array.isArray(rows) ||
       rows.length === 0
     ) {
-      return corsJson(
+      return jsonResponse(
         {
           status: 'error',
           message:
@@ -776,7 +856,7 @@ async function handleExport(
       !bytes ||
       bytes.byteLength === 0
     ) {
-      return corsJson(
+      return jsonResponse(
         {
           status: 'error',
           message:
@@ -813,7 +893,7 @@ async function handleExport(
       error
     );
 
-    return corsJson(
+    return jsonResponse(
       {
         status: 'error',
         message:
