@@ -9,7 +9,7 @@ import {
   Camera,
   Sparkles,
   LayoutGrid,
-  GraduationCap,
+  UserRound,
   ChevronRight
 } from 'lucide-react';
 
@@ -219,7 +219,7 @@ export default function GuruDashboard({
             </div>
 
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.3rem] bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-lg shadow-blue-600/20 ring-4 ring-blue-50">
-              <GraduationCap className="h-7 w-7" strokeWidth={2.2} />
+              <UserRound className="h-7 w-7" strokeWidth={2.1} />
             </div>
           </section>
 
