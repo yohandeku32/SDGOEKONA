@@ -259,9 +259,9 @@ export default function App() {
     setIsSubmitting(true);
     setUploadProgress(10);
 
-    // Google Drive / Apps Script kadang butuh waktu singkat
-    // untuk menyelesaikan upload foto sebelumnya.
-    // Jeda dibuat otomatis agar guru tidak perlu menunggu atau mencoba ulang.
+    // Google Drive / Apps Script diproses berurutan di server.
+    // Jeda kecil di browser membantu mengurangi benturan saat
+    // MASUK lalu PULANG dikirim sangat berdekatan.
     const elapsedSinceLastUpload =
       Date.now() - lastUploadCompletedAtRef.current;
 
@@ -297,86 +297,151 @@ export default function App() {
       note: '-'
     };
 
+    // Retry hanya untuk kondisi antre/transient yang memang aman
+    // dicoba kembali. Error validasi seperti 400/404/409 tidak diulang.
+    const MAX_UPLOAD_ATTEMPTS = 3;
+    const RETRY_DELAYS_MS = [3000, 7000];
+
     try {
-      setUploadProgress(55);
+      let lastFailureMessage =
+        'Gagal mengirim data absensi.';
 
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => {
-        controller.abort();
-      }, UPLOAD_REQUEST_TIMEOUT_MS);
+      for (
+        let attempt = 0;
+        attempt < MAX_UPLOAD_ATTEMPTS;
+        attempt += 1
+      ) {
+        const attemptNumber = attempt + 1;
 
-      let response: Response;
+        try {
+          setUploadProgress(
+            attemptNumber === 1
+              ? 55
+              : Math.min(
+                  55 + attempt * 15,
+                  85
+                )
+          );
 
-      try {
-        response = await fetch(ABSENSI_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-      } finally {
-        window.clearTimeout(timeoutId);
+          const controller = new AbortController();
+
+          const timeoutId = window.setTimeout(() => {
+            controller.abort();
+          }, UPLOAD_REQUEST_TIMEOUT_MS);
+
+          let response: Response;
+
+          try {
+            response = await fetch(ABSENSI_API_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(payload),
+              signal: controller.signal
+            });
+          } finally {
+            window.clearTimeout(timeoutId);
+          }
+
+          setUploadProgress(85);
+
+          const raw = await response.text();
+
+          let result: any;
+
+          try {
+            result = JSON.parse(raw);
+          } catch {
+            lastFailureMessage =
+              'Server absensi mengembalikan response yang tidak valid.';
+
+            // Jangan mengulang response HTML/non-JSON 404.
+            // Kondisi seperti ini biasanya menunjukkan endpoint bermasalah.
+            break;
+          }
+
+          const retryable =
+            response.status === 408 ||
+            response.status === 425 ||
+            response.status === 429 ||
+            response.status === 502 ||
+            response.status === 503 ||
+            response.status === 504 ||
+            result?.status === 'retry';
+
+          if (
+            response.ok &&
+            result?.status === 'success' &&
+            result?.data
+          ) {
+            setUploadProgress(100);
+            lastUploadCompletedAtRef.current = Date.now();
+
+            // Tampilkan hasil POST langsung di dashboard.
+            // Jadi UI tidak perlu menunggu GET selesai.
+            mergeUploadedAttendance(result.data);
+
+            setTimeout(() => {
+              setIsSubmitting(false);
+              setUploadProgress(0);
+              setCurrentMode(null);
+              setSuccessMessage(
+                `Absensi ${modeYangDikirim} Anda sukses direkam.`
+              );
+              setShowSuccessModal(true);
+            }, 350);
+
+            // Sinkronisasi ulang dijalankan di belakang tanpa menutup UI.
+            window.setTimeout(() => {
+              void fetchDatabase(false);
+            }, 1200);
+
+            return;
+          }
+
+          lastFailureMessage =
+            result?.message ||
+            `Gagal mengirim absensi (HTTP ${response.status}).`;
+
+          if (
+            retryable &&
+            attempt < MAX_UPLOAD_ATTEMPTS - 1
+          ) {
+            await sleep(RETRY_DELAYS_MS[attempt] || 7000);
+            continue;
+          }
+
+          break;
+        } catch (err) {
+          console.error(
+            'ABSEN ATTEMPT ERROR:',
+            attemptNumber,
+            err
+          );
+
+          lastFailureMessage =
+            err instanceof DOMException &&
+            err.name === 'AbortError'
+              ? 'Server terlalu lama merespons. Sistem akan mencoba kembali otomatis.'
+              : err instanceof Error
+                ? err.message
+                : 'Gagal mengirim data absensi.';
+
+          // Timeout jaringan / koneksi sementara boleh dicoba lagi.
+          if (
+            attempt < MAX_UPLOAD_ATTEMPTS - 1
+          ) {
+            await sleep(RETRY_DELAYS_MS[attempt] || 7000);
+            continue;
+          }
+
+          break;
+        }
       }
-
-      setUploadProgress(85);
-
-      const raw = await response.text();
-
-      let result: any;
-
-      try {
-        result = JSON.parse(raw);
-      } catch {
-        throw new Error(
-          'Server absensi mengembalikan response yang tidak valid.'
-        );
-      }
-
-      if (!response.ok || result.status === 'error') {
-        alert(
-          'GAGAL MENGIRIM ABSEN: ' +
-            (result.message || `HTTP ${response.status}`)
-        );
-
-        setIsSubmitting(false);
-        setUploadProgress(0);
-        return;
-      }
-
-      setUploadProgress(100);
-      lastUploadCompletedAtRef.current = Date.now();
-
-      // Tampilkan hasil POST langsung di dashboard.
-      // Jadi UI tidak perlu menunggu GET selesai.
-      mergeUploadedAttendance(result?.data);
-
-      setTimeout(() => {
-        setIsSubmitting(false);
-        setUploadProgress(0);
-        setCurrentMode(null);
-        setSuccessMessage(`Absensi ${modeYangDikirim} Anda sukses direkam.`);
-        setShowSuccessModal(true);
-      }, 350);
-
-      // Sinkronisasi ulang dijalankan di belakang tanpa menutup UI.
-      // Beri sedikit waktu tambahan agar data Drive/DB sudah stabil.
-      window.setTimeout(() => {
-        void fetchDatabase(false);
-      }, 1200);
-    } catch (err) {
-      console.error(err);
-
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Server sedang terlalu lama merespons. Foto mungkin masih diproses. Silakan cek kembali beberapa saat lagi.'
-          : err instanceof Error
-            ? err.message
-            : 'Gagal mengirim data absensi. Pastikan internet stabil dan coba lagi.';
 
       alert(
-        `GAGAL MENGIRIM ABSEN: ${message}`
+        `GAGAL MENGIRIM ABSEN: ${lastFailureMessage}`
       );
 
       setIsSubmitting(false);
