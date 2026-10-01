@@ -1535,16 +1535,12 @@ async function handleRequest(request: Request) {
       );
     }
   }
-}
 
 
 
 
 
-// ======================================================
-// HAPUS FOTO GOOGLE DRIVE MELALUI APPS SCRIPT
-// FOTO DIPINDAHKAN KE SAMPAH, BUKAN HAPUS PERMANEN
-// ======================================================
+// ======================================================// ======================================================
 
 async function hapusFotoDrive(
   appsScriptUrl: string,
