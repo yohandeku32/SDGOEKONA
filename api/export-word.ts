@@ -909,7 +909,7 @@ function normalizeNip(
   return String(
     value || ''
   ).replace(
-    /\\D/g,
+    /\D/g,
     ''
   );
 }
