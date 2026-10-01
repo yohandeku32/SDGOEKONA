@@ -1684,15 +1684,6 @@ function buildDocumentXml(
 
     ${table}
 
-    ${paragraph(
-      'Foto absensi ditanam langsung ke dalam dokumen Word. Rasio foto dipertahankan sesuai ukuran asli.',
-      {
-        size: 15,
-        before: 70,
-        after: 0
-      }
-    )}
-
     <w:sectPr>
       <w:pgSz
         w:w="16838"
