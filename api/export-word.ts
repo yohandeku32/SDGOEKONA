@@ -35,6 +35,7 @@ type PhotoData = {
 type ImageRelation = {
   id: string;
   target: string;
+  fileId: string;
 };
 
 const MONTHS: Record<string, string> = {
@@ -1076,7 +1077,8 @@ function buildDocumentXml(
 
       imageRelations.push({
         id: relationId,
-        target: `media/image${imageRelations.length + 1}.${extension}`
+        target: `media/image${imageRelations.length + 1}.${extension}`,
+        fileId
       });
 
       relationByFileId.set(
@@ -1639,66 +1641,20 @@ async function buildDocx(
     documentRels
   );
 
-  const relationToFile =
-    new Map<
-      string,
-      string
-    >(
-      imageRelations.map(
-        (relation) => [
-          relation.id,
-          relation.target
-        ]
-      )
-    );
-
   for (
     const relation of imageRelations
   ) {
-    const target =
-      relationToFile.get(
-        relation.id
-      );
-
-    if (!target) {
-      continue;
-    }
-
-    const fileName =
-      target
-        .replace(
-          /^media\//,
-          ''
-        );
-
-    const match =
-      fileName.match(
-        /^image(\d+)\.(jpg|png)$/
-      );
-
-    if (!match) {
-      continue;
-    }
-
-    const index =
-      Number(
-        match[1]
-      ) - 1;
-
-    const photos =
-      Array.from(
-        photoMap.values()
-      );
-
     const photo =
-      photos[index];
+      photoMap.get(
+        relation.fileId
+      );
 
     if (!photo) {
       continue;
     }
 
     zip.file(
-      `word/${target}`,
+      `word/${relation.target}`,
       photo.bytes
     );
   }
