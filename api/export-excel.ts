@@ -1,87 +1,7 @@
 export const runtime = 'nodejs';
 
 import { connect } from '@tidbcloud/serverless';
-import JSZip from 'jszip';
-
-
-function xmlEscape(value: unknown): string {
-  if (value === null || value === undefined) return '';
-
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function jsonResponse(
-  data: unknown,
-  status = 200
-) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-      headers: {
-        'Content-Type':
-          'application/json; charset=utf-8',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods':
-          'GET, OPTIONS',
-        'Access-Control-Allow-Headers':
-          'Content-Type',
-        'Cache-Control':
-          'no-store',
-      },
-    }
-  );
-}
-
-function fileResponse(
-  data: Uint8Array,
-  mimeType: string,
-  filename: string
-) {
-  return new Response(data, {
-    status: 200,
-    headers: {
-      'Content-Type': mimeType,
-      'Content-Disposition':
-        `attachment; filename="${filename}"`,
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods':
-        'GET, OPTIONS',
-      'Cache-Control':
-        'no-store',
-    },
-  });
-}
-
-async function zipFiles(
-  files: Array<{
-    name: string;
-    data: string;
-  }>
-) {
-  const zip =
-    new JSZip();
-
-  for (const file of files) {
-    zip.file(
-      file.name,
-      file.data
-    );
-  }
-
-  return zip.generateAsync({
-    type: 'uint8array',
-    compression: 'DEFLATE',
-    compressionOptions: {
-      level: 6,
-    },
-  });
-}
+import * as ExcelJS from 'exceljs';
 
 type RowData = {
   id_user: string;
@@ -97,8 +17,15 @@ type RowData = {
   nip?: string | null;
   nik?: string | null;
   status_kepegawaian?: string | null;
+  pangkat?: string | null;
   golongan_ruang?: string | null;
   jabatan?: string | null;
+};
+
+type PhotoData = {
+  file_id: string;
+  base64: string;
+  mime_type: string;
 };
 
 const MONTHS: Record<string, string> = {
@@ -116,6 +43,52 @@ const MONTHS: Record<string, string> = {
   '12': 'Desember',
 };
 
+const MAX_PHOTOS_PER_REQUEST = 25;
+
+function getHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Cache-Control': 'no-store',
+  };
+}
+
+function jsonResponse(
+  data: unknown,
+  status = 200
+) {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        ...getHeaders(),
+        'Content-Type':
+          'application/json; charset=utf-8',
+      },
+    }
+  );
+}
+
+function fileResponse(
+  data: Uint8Array,
+  filename: string
+) {
+  return new Response(data, {
+    status: 200,
+    headers: {
+      ...getHeaders(),
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition':
+        `attachment; filename="${filename}"`,
+      'Content-Length':
+        String(data.byteLength),
+    },
+  });
+}
+
 function normalizeJam(row: RowData) {
   let masuk = row.jam_masuk || '';
   let pulang = row.jam_pulang || '';
@@ -131,7 +104,10 @@ function normalizeJam(row: RowData) {
       pulang = parts[1] || '';
     }
 
-    if (row.status === 'PULANG' && !row.jam_masuk) {
+    if (
+      row.status === 'PULANG' &&
+      !row.jam_masuk
+    ) {
       masuk = '';
       pulang = parts[0] || '';
     }
@@ -143,515 +119,875 @@ function normalizeJam(row: RowData) {
   };
 }
 
-function driveUrl(fileId?: string | null) {
-  return fileId
-    ? `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`
-    : '';
-}
-
-function cell(value: unknown, style = 0) {
-  return (
-    `<c t="inlineStr" s="${style}"><is><t xml:space="preserve">${xmlEscape(
-      value
-    )}</t></is></c>`
-  );
-}
-
-function linkCell(
-  text: string,
-  url: string,
-  style = 3
-) {
-  if (!url) {
-    return cell('Tidak ada', style);
-  }
-
-  return (
-    `<c s="${style}"><f>HYPERLINK(&quot;${xmlEscape(
-      url
-    )}&quot;,&quot;${xmlEscape(
-      text
-    )}&quot;)</f><v>${xmlEscape(
-      text
-    )}</v></c>`
-  );
-}
-
-
-function formatDate(value: unknown): string {
-  const text = String(value ?? '');
-
-  if (!text) {
-    return '-';
-  }
-
-  const parts = text.split('-');
+function formatDate(value: unknown) {
+  const parts =
+    String(value || '').split('-');
 
   if (parts.length === 3) {
     return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
 
-  return text;
+  return String(value || '-');
 }
 
-function buildSheet(
+function driveUrl(
+  fileId?: string | null
+) {
+  return fileId
+    ? `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`
+    : '';
+}
+
+function safeFileName(
+  value: string
+) {
+  return String(value || 'file')
+    .replace(
+      /[\\/:*?"<>|]/g,
+      '-'
+    )
+    .replace(
+      /\s+/g,
+      '_'
+    )
+    .trim();
+}
+
+async function fetchPhotos(
+  fileIds: string[]
+) {
+  const appsScriptUrl =
+    process.env.APPS_SCRIPT_URL;
+
+  const photoMap =
+    new Map<string, PhotoData>();
+
+  if (
+    !appsScriptUrl ||
+    fileIds.length === 0
+  ) {
+    return photoMap;
+  }
+
+  const uniqueIds =
+    Array.from(
+      new Set(
+        fileIds
+          .map((id) => String(id || '').trim())
+          .filter(Boolean)
+      )
+    );
+
+  for (
+    let start = 0;
+    start < uniqueIds.length;
+    start += MAX_PHOTOS_PER_REQUEST
+  ) {
+    const chunk =
+      uniqueIds.slice(
+        start,
+        start + MAX_PHOTOS_PER_REQUEST
+      );
+
+    try {
+      const response =
+        await fetch(
+          appsScriptUrl,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify({
+              action:
+                'get_photos_base64',
+              file_ids: chunk,
+            }),
+          }
+        );
+
+      const text =
+        await response.text();
+
+      if (!response.ok) {
+        console.error(
+          'PHOTO EXPORT HTTP ERROR:',
+          response.status,
+          text
+        );
+        continue;
+      }
+
+      let result: any;
+
+      try {
+        result =
+          JSON.parse(text);
+      } catch {
+        console.error(
+          'PHOTO EXPORT INVALID JSON:',
+          text
+        );
+        continue;
+      }
+
+      if (
+        result?.status !==
+        'success'
+      ) {
+        console.error(
+          'PHOTO EXPORT APP SCRIPT ERROR:',
+          result?.message ||
+            'Unknown error'
+        );
+        continue;
+      }
+
+      const photos =
+        Array.isArray(
+          result?.photos
+        )
+          ? result.photos
+          : [];
+
+      for (
+        const photo of photos
+      ) {
+        const fileId =
+          String(
+            photo?.file_id ||
+              ''
+          ).trim();
+
+        const base64 =
+          String(
+            photo?.base64 ||
+              ''
+          ).trim();
+
+        const mimeType =
+          String(
+            photo?.mime_type ||
+              ''
+          ).trim();
+
+        if (
+          fileId &&
+          base64 &&
+          mimeType
+        ) {
+          photoMap.set(
+            fileId,
+            {
+              file_id:
+                fileId,
+              base64,
+              mime_type:
+                mimeType,
+            }
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        'PHOTO EXPORT FETCH ERROR:',
+        error
+      );
+    }
+  }
+
+  return photoMap;
+}
+
+function getImageExtension(
+  mimeType: string
+) {
+  const mime =
+    mimeType.toLowerCase();
+
+  if (
+    mime.includes('png')
+  ) {
+    return 'png';
+  }
+
+  if (
+    mime.includes('webp')
+  ) {
+    return 'jpeg';
+  }
+
+  return 'jpeg';
+}
+
+function addPhotoToCell(
+  workbook: ExcelJS.Workbook,
+  worksheet: ExcelJS.Worksheet,
+  cellAddress: string,
+  photo: PhotoData | undefined,
+  hyperlink: string
+) {
+  const cell =
+    worksheet.getCell(
+      cellAddress
+    );
+
+  cell.alignment = {
+    horizontal: 'center',
+    vertical: 'middle',
+    wrapText: true,
+  };
+
+  if (!photo) {
+    cell.value =
+      hyperlink
+        ? {
+            text: 'Lihat Foto',
+            hyperlink,
+          }
+        : 'Tidak ada foto';
+
+    if (hyperlink) {
+      cell.font = {
+        name: 'Arial',
+        size: 9,
+        color: {
+          argb: 'FF0563C1',
+        },
+        underline: true,
+      };
+    }
+
+    return;
+  }
+
+  try {
+    const imageId =
+      workbook.addImage({
+        base64:
+          `data:${photo.mime_type};base64,${photo.base64}`,
+        extension:
+          getImageExtension(
+            photo.mime_type
+          ),
+      });
+
+    const column =
+      cell.column;
+    const row =
+      cell.row;
+
+    worksheet.addImage(
+      imageId,
+      {
+        tl: {
+          col: column - 1 + 0.08,
+          row: row - 1 + 0.08,
+        },
+        ext: {
+          width: 105,
+          height: 78,
+        },
+      }
+    );
+
+    cell.value =
+      hyperlink
+        ? {
+            text: ' ',
+            hyperlink,
+          }
+        : ' ';
+  } catch (error) {
+    console.error(
+      'ADD EXCEL IMAGE ERROR:',
+      error
+    );
+
+    cell.value =
+      hyperlink
+        ? {
+            text: 'Lihat Foto',
+            hyperlink,
+          }
+        : 'Foto gagal dimuat';
+
+    if (hyperlink) {
+      cell.font = {
+        name: 'Arial',
+        size: 9,
+        color: {
+          argb: 'FF0563C1',
+        },
+        underline: true,
+      };
+    }
+  }
+}
+
+async function buildExcel(
   rows: RowData[],
   bulan: string,
   tahun: string
 ) {
-  const headers = [
-    'NO',
-    'NAMA',
-    'JENIS IDENTITAS',
-    'NIP / NIK',
-    'STATUS KEPEGAWAIAN',
-    'GOL.RUANG',
-    'JABATAN',
-    'TANGGAL',
-    'JAM MASUK',
-    'JAM PULANG',
-    'STATUS ABSENSI',
-    'KETERANGAN',
-    'FOTO MASUK',
-    'FOTO PULANG',
+  const workbook =
+    new ExcelJS.Workbook();
+
+  workbook.creator =
+    'SD GMIT OEKONA';
+
+  workbook.lastModifiedBy =
+    'SD GMIT OEKONA';
+
+  workbook.created =
+    new Date();
+
+  workbook.modified =
+    new Date();
+
+  const worksheet =
+    workbook.addWorksheet(
+      'Dashboard Admin',
+      {
+        views: [
+          {
+            state: 'frozen',
+            ySplit: 5,
+          },
+        ],
+        pageSetup: {
+          paperSize: 9,
+          orientation: 'landscape',
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 0,
+        },
+      }
+    );
+
+  worksheet.columns = [
+    {
+      key: 'no',
+      width: 7,
+    },
+    {
+      key: 'identity',
+      width: 38,
+    },
+    {
+      key: 'date',
+      width: 14,
+    },
+    {
+      key: 'time',
+      width: 19,
+    },
+    {
+      key: 'status',
+      width: 22,
+    },
+    {
+      key: 'note',
+      width: 25,
+    },
+    {
+      key: 'photo_in',
+      width: 18,
+    },
+    {
+      key: 'photo_out',
+      width: 18,
+    },
   ];
 
-  const body: string[] = [];
+  // Judul mengikuti konteks Dashboard Admin.
+  worksheet.mergeCells(
+    'A1:H1'
+  );
+  worksheet.mergeCells(
+    'A2:H2'
+  );
+  worksheet.mergeCells(
+    'A3:H3'
+  );
 
-  rows.forEach((row, index) => {
-    const jam = normalizeJam(row);
+  worksheet.getCell('A1').value =
+    'REKAP ABSENSI GURU DAN PEGAWAI';
 
-    const identityLabel = row.nip
-      ? 'NIP'
-      : row.nik
-        ? 'NIK'
-        : '-';
+  worksheet.getCell('A2').value =
+    'SD GMIT OEKONA';
+
+  worksheet.getCell('A3').value =
+    `BULAN ${MONTHS[bulan] || bulan} ${tahun}`;
+
+  for (
+    const address of [
+      'A1',
+      'A2',
+      'A3',
+    ]
+  ) {
+    worksheet.getCell(
+      address
+    ).alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+    };
+  }
+
+  worksheet.getCell('A1').font = {
+    name: 'Arial',
+    size: 15,
+    bold: true,
+  };
+
+  worksheet.getCell('A2').font = {
+    name: 'Arial',
+    size: 12,
+    bold: true,
+  };
+
+  worksheet.getCell('A3').font = {
+    name: 'Arial',
+    size: 11,
+    bold: true,
+  };
+
+  worksheet.getRow(1).height = 26;
+  worksheet.getRow(2).height = 22;
+  worksheet.getRow(3).height = 22;
+
+  worksheet.addRow([]);
+
+  const headerRow =
+    worksheet.getRow(5);
+
+  const headers = [
+    'No',
+    'Nama / NIP-NIK / Jabatan',
+    'Tanggal',
+    'Jam',
+    'Status',
+    'Keterangan',
+    'Foto Masuk',
+    'Foto Pulang',
+  ];
+
+  headerRow.values =
+    headers;
+
+  headerRow.height = 32;
+
+  headerRow.eachCell(
+    (cell) => {
+      cell.font = {
+        name: 'Arial',
+        size: 10,
+        bold: true,
+      };
+
+      cell.alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+        wrapText: true,
+      };
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: {
+          argb: 'FFF1F5F9',
+        },
+      };
+
+      cell.border = {
+        top: {
+          style: 'thin',
+        },
+        bottom: {
+          style: 'thin',
+        },
+        left: {
+          style: 'thin',
+        },
+        right: {
+          style: 'thin',
+        },
+      };
+    }
+  );
+
+  /*
+   * Data disusun sama seperti groupedRecords
+   * pada Dashboard Admin:
+   * satu group = satu guru/pegawai,
+   * kolom No dan Identitas digabung
+   * selama guru tersebut mempunyai
+   * beberapa record absensi.
+   */
+  const groups =
+    new Map<
+      string,
+      {
+        id_user: string;
+        name: string;
+        nip?: string | null;
+        nik?: string | null;
+        status_kepegawaian?:
+          string | null;
+        golongan_ruang?:
+          string | null;
+        jabatan?: string | null;
+        records: RowData[];
+      }
+    >();
+
+  rows.forEach(
+    (record) => {
+      const key =
+        String(
+          record.id_user
+        );
+
+      const existing =
+        groups.get(key);
+
+      if (existing) {
+        existing.records.push(
+          record
+        );
+        return;
+      }
+
+      groups.set(
+        key,
+        {
+          id_user: key,
+          name:
+            record.name ||
+            '-',
+          nip:
+            record.nip,
+          nik:
+            record.nik,
+          status_kepegawaian:
+            record.status_kepegawaian,
+          golongan_ruang:
+            record.golongan_ruang,
+          jabatan:
+            record.jabatan,
+          records: [record],
+        }
+      );
+    }
+  );
+
+  const groupList =
+    Array.from(
+      groups.values()
+    );
+
+  const allPhotoIds =
+    rows.flatMap(
+      (row) => [
+        row.foto_masuk_file_id || '',
+        row.foto_pulang_file_id || '',
+      ]
+    );
+
+  const photoMap =
+    await fetchPhotos(
+      allPhotoIds
+    );
+
+  let excelRowNumber = 6;
+
+  for (
+    let groupIndex = 0;
+    groupIndex < groupList.length;
+    groupIndex++
+  ) {
+    const group =
+      groupList[groupIndex];
+
+    const firstRow =
+      excelRowNumber;
+
+    const lastRow =
+      excelRowNumber +
+      group.records.length -
+      1;
 
     const identityNumber =
-      row.nip ||
-      row.nik ||
+      group.nip ||
+      group.nik ||
+      group.id_user ||
       '-';
 
-    body.push(
-      `<row r="${index + 6}">` +
-        cell(index + 1) +
-        cell(row.name || '-', 1) +
-        cell(identityLabel) +
-        cell(identityNumber) +
-        cell(
-          row.status_kepegawaian || '-'
-        ) +
-        cell(
-          row.golongan_ruang || '-'
-        ) +
-        cell(row.jabatan || '-') +
-        cell(formatDate(row.date)) +
-        cell(jam.masuk) +
-        cell(jam.pulang) +
-        cell(row.status || '-') +
-        cell(row.keterangan || '-') +
-        linkCell(
-          row.foto_masuk_file_id
-            ? 'Lihat Foto'
-            : 'Tidak ada',
+    const identityLabel =
+      group.nip
+        ? 'NIP'
+        : group.nik
+          ? 'NIK'
+          : 'ID';
+
+    group.records.forEach(
+      (record, recordIndex) => {
+        const rowNumber =
+          excelRowNumber;
+
+        const jam =
+          normalizeJam(record);
+
+        worksheet.getCell(
+          `C${rowNumber}`
+        ).value =
+          formatDate(
+            record.date
+          );
+
+        worksheet.getCell(
+          `D${rowNumber}`
+        ).value =
+          `${jam.masuk} - ${jam.pulang}`;
+
+        worksheet.getCell(
+          `E${rowNumber}`
+        ).value =
+          record.status || '-';
+
+        worksheet.getCell(
+          `F${rowNumber}`
+        ).value =
+          record.keterangan ||
+          '-';
+
+        const photoIn =
+          record.foto_masuk_file_id
+            ? photoMap.get(
+                record.foto_masuk_file_id
+              )
+            : undefined;
+
+        const photoOut =
+          record.foto_pulang_file_id
+            ? photoMap.get(
+                record.foto_pulang_file_id
+              )
+            : undefined;
+
+        addPhotoToCell(
+          workbook,
+          worksheet,
+          `G${rowNumber}`,
+          photoIn,
           driveUrl(
-            row.foto_masuk_file_id
+            record.foto_masuk_file_id
           )
-        ) +
-        linkCell(
-          row.foto_pulang_file_id
-            ? 'Lihat Foto'
-            : 'Tidak ada',
+        );
+
+        addPhotoToCell(
+          workbook,
+          worksheet,
+          `H${rowNumber}`,
+          photoOut,
           driveUrl(
-            row.foto_pulang_file_id
+            record.foto_pulang_file_id
           )
-        ) +
-        '</row>'
+        );
+
+        for (
+          const column of [
+            'C',
+            'D',
+            'E',
+            'F',
+            'G',
+            'H',
+          ]
+        ) {
+          const cell =
+            worksheet.getCell(
+              `${column}${rowNumber}`
+            );
+
+          cell.font =
+            cell.font || {
+              name: 'Arial',
+              size: 10,
+            };
+
+          cell.alignment = {
+            horizontal:
+              column === 'F'
+                ? 'left'
+                : 'center',
+            vertical:
+              'middle',
+            wrapText:
+              true,
+          };
+
+          cell.border = {
+            top: {
+              style: 'thin',
+            },
+            bottom: {
+              style: 'thin',
+            },
+            left: {
+              style: 'thin',
+            },
+            right: {
+              style: 'thin',
+            },
+          };
+        }
+
+        worksheet.getRow(
+          rowNumber
+        ).height = 68;
+
+        if (
+          recordIndex === 0
+        ) {
+          worksheet.getCell(
+            `A${rowNumber}`
+          ).value =
+            groupIndex + 1;
+
+          worksheet.getCell(
+            `B${rowNumber}`
+          ).value =
+            `Nama : ${group.name || '-'}
+${identityLabel} : ${identityNumber}
+Status : ${group.status_kepegawaian || '-'}
+Gol.Ruang : ${group.golongan_ruang || '-'}
+Jabatan : ${group.jabatan || '-'}`;
+
+          for (
+            const cellAddress of [
+              `A${rowNumber}`,
+              `B${rowNumber}`,
+            ]
+          ) {
+            const cell =
+              worksheet.getCell(
+                cellAddress
+              );
+
+            cell.font = {
+              name: 'Arial',
+              size: 10,
+              bold:
+                cellAddress.startsWith(
+                  'B'
+                ),
+            };
+
+            cell.alignment = {
+              horizontal:
+                cellAddress.startsWith(
+                  'A'
+                )
+                  ? 'center'
+                  : 'left',
+              vertical:
+                'middle',
+                wrapText:
+                  true,
+            };
+
+            cell.border = {
+              top: {
+                style: 'thin',
+              },
+              bottom: {
+                style: 'thin',
+              },
+              left: {
+                style: 'thin',
+              },
+              right: {
+                style: 'thin',
+              },
+            };
+          }
+        }
+      }
     );
-  });
 
-  const header =
-    `<row r="5">${headers
-      .map((h) => cell(h, 2))
-      .join('')}</row>`;
+    if (
+      lastRow > firstRow
+    ) {
+      worksheet.mergeCells(
+        `A${firstRow}:A${lastRow}`
+      );
 
-  const merges = [
-    'A1:N1',
-    'A2:N2',
-    'A3:N3',
-  ]
-    .map(
-      (ref) =>
-        `<mergeCell ref="${ref}"/>`
-    )
-    .join('');
+      worksheet.mergeCells(
+        `B${firstRow}:B${lastRow}`
+      );
+    }
 
-  const lastRow =
+    excelRowNumber =
+      lastRow + 1;
+  }
+
+  const actualLastRow =
     Math.max(
-      6,
-      rows.length + 5
+      5,
+      excelRowNumber - 1
     );
 
-  const sheetXml =
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetPr>
-    <pageSetUpPr fitToPage="1"/>
-  </sheetPr>
+  worksheet.autoFilter = {
+    from: 'A5',
+    to: `H${actualLastRow}`,
+  };
 
-  <dimension ref="A1:N${lastRow}"/>
+  worksheet.printTitlesRow =
+    '1:5';
 
-  <sheetViews>
-    <sheetView workbookViewId="0">
-      <pane ySplit="5" state="frozen"/>
-    </sheetView>
-  </sheetViews>
+  worksheet.pageSetup.margins = {
+    left: 0.25,
+    right: 0.25,
+    top: 0.35,
+    bottom: 0.35,
+    header: 0.15,
+    footer: 0.15,
+  };
 
-  <sheetFormatPr defaultRowHeight="18"/>
+  const buffer =
+    await workbook.xlsx.writeBuffer();
 
-  <cols>
-    <col min="1" max="1" width="7" customWidth="1"/>
-    <col min="2" max="2" width="30" customWidth="1"/>
-    <col min="3" max="3" width="15" customWidth="1"/>
-    <col min="4" max="4" width="24" customWidth="1"/>
-    <col min="5" max="5" width="20" customWidth="1"/>
-    <col min="6" max="6" width="14" customWidth="1"/>
-    <col min="7" max="7" width="24" customWidth="1"/>
-    <col min="8" max="10" width="14" customWidth="1"/>
-    <col min="11" max="11" width="19" customWidth="1"/>
-    <col min="12" max="12" width="22" customWidth="1"/>
-    <col min="13" max="14" width="18" customWidth="1"/>
-  </cols>
-
-  <sheetData>
-    <row r="1" ht="25" customHeight="1">
-      ${cell(
-        'LAPORAN ABSENSI GURU DAN PEGAWAI',
-        4
-      )}
-    </row>
-
-    <row r="2" ht="21" customHeight="1">
-      ${cell('SD GMIT OEKONA', 4)}
-    </row>
-
-    <row r="3" ht="21" customHeight="1">
-      ${cell(
-        `BULAN ${MONTHS[bulan] || bulan} ${tahun}`,
-        4
-      )}
-    </row>
-
-    <row r="4">
-      ${cell('')}
-    </row>
-
-    ${header}
-
-    ${body.join('\n')}
-  </sheetData>
-
-  <mergeCells count="3">
-    ${merges}
-  </mergeCells>
-
-  <pageMargins
-    left="0.25"
-    right="0.25"
-    top="0.35"
-    bottom="0.35"
-    header="0.15"
-    footer="0.15"
-  />
-
-  <pageSetup
-    paperSize="9"
-    orientation="landscape"
-    fitToWidth="1"
-    fitToHeight="0"
-  />
-
-  <autoFilter
-    ref="A5:N${Math.max(
-      5,
-      rows.length + 5
-    )}"
-  />
-</worksheet>`;
-
-  return sheetXml;
-}
-
-function buildStyles() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-
-  <fonts count="5">
-    <font>
-      <sz val="10"/>
-      <name val="Arial"/>
-    </font>
-    <font>
-      <b/>
-      <sz val="10"/>
-      <name val="Arial"/>
-    </font>
-    <font>
-      <b/>
-      <sz val="9"/>
-      <name val="Arial"/>
-    </font>
-    <font>
-      <sz val="10"/>
-      <name val="Arial"/>
-      <color rgb="0563C1"/>
-      <u/>
-    </font>
-    <font>
-      <b/>
-      <sz val="14"/>
-      <name val="Arial"/>
-    </font>
-  </fonts>
-
-  <fills count="3">
-    <fill>
-      <patternFill patternType="none"/>
-    </fill>
-    <fill>
-      <patternFill patternType="gray125"/>
-    </fill>
-    <fill>
-      <patternFill patternType="solid">
-        <fgColor rgb="D9EAF7"/>
-        <bgColor indexed="64"/>
-      </patternFill>
-    </fill>
-  </fills>
-
-  <borders count="2">
-    <border>
-      <left/>
-      <right/>
-      <top/>
-      <bottom/>
-      <diagonal/>
-    </border>
-    <border>
-      <left style="thin"/>
-      <right style="thin"/>
-      <top style="thin"/>
-      <bottom style="thin"/>
-      <diagonal/>
-    </border>
-  </borders>
-
-  <cellStyleXfs count="1">
-    <xf
-      numFmtId="0"
-      fontId="0"
-      fillId="0"
-      borderId="0"
-    />
-  </cellStyleXfs>
-
-  <cellXfs count="5">
-    <xf
-      numFmtId="0"
-      fontId="0"
-      fillId="0"
-      borderId="1"
-      applyAlignment="1"
-    >
-      <alignment
-        vertical="center"
-        wrapText="1"
-        horizontal="center"
-      />
-    </xf>
-
-    <xf
-      numFmtId="0"
-      fontId="1"
-      fillId="0"
-      borderId="1"
-      applyAlignment="1"
-    >
-      <alignment
-        vertical="center"
-        wrapText="1"
-        horizontal="left"
-      />
-    </xf>
-
-    <xf
-      numFmtId="0"
-      fontId="2"
-      fillId="2"
-      borderId="1"
-      applyAlignment="1"
-    >
-      <alignment
-        vertical="center"
-        wrapText="1"
-        horizontal="center"
-      />
-    </xf>
-
-    <xf
-      numFmtId="0"
-      fontId="3"
-      fillId="0"
-      borderId="1"
-      applyAlignment="1"
-    >
-      <alignment
-        vertical="center"
-        wrapText="1"
-        horizontal="center"
-      />
-    </xf>
-
-    <xf
-      numFmtId="0"
-      fontId="4"
-      fillId="0"
-      borderId="0"
-      applyAlignment="1"
-    >
-      <alignment
-        vertical="center"
-        horizontal="center"
-      />
-    </xf>
-  </cellXfs>
-
-</styleSheet>`;
-}
-
-async function buildXlsx(
-  rows: RowData[],
-  bulan: string,
-  tahun: string
-) {
-  const contentTypes =
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-
-  <Default
-    Extension="rels"
-    ContentType="application/vnd.openxmlformats-package.relationships+xml"
-  />
-
-  <Default
-    Extension="xml"
-    ContentType="application/xml"
-  />
-
-  <Override
-    PartName="/xl/workbook.xml"
-    ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
-  />
-
-  <Override
-    PartName="/xl/worksheets/sheet1.xml"
-    ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
-  />
-
-  <Override
-    PartName="/xl/styles.xml"
-    ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"
-  />
-
-</Types>`;
-
-  const rels =
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship
-    Id="rId1"
-    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"
-    Target="xl/workbook.xml"
-  />
-</Relationships>`;
-
-  const workbook =
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook
-  xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
->
-  <sheets>
-    <sheet
-      name="Laporan Absensi"
-      sheetId="1"
-      r:id="rId1"
-    />
-  </sheets>
-</workbook>`;
-
-  const workbookRels =
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-
-  <Relationship
-    Id="rId1"
-    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
-    Target="worksheets/sheet1.xml"
-  />
-
-  <Relationship
-    Id="rId2"
-    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"
-    Target="styles.xml"
-  />
-
-</Relationships>`;
-
-  return zipFiles([
-    {
-      name: '[Content_Types].xml',
-      data: contentTypes,
-    },
-    {
-      name: '_rels/.rels',
-      data: rels,
-    },
-    {
-      name: 'xl/workbook.xml',
-      data: workbook,
-    },
-    {
-      name: 'xl/_rels/workbook.xml.rels',
-      data: workbookRels,
-    },
-    {
-      name: 'xl/styles.xml',
-      data: buildStyles(),
-    },
-    {
-      name: 'xl/worksheets/sheet1.xml',
-      data: buildSheet(
-        rows,
-        bulan,
-        tahun
-      ),
-    },
-  ]);
+  return new Uint8Array(
+    buffer as ArrayBuffer
+  );
 }
 
 async function handleExport(
   request: Request
 ) {
-  if (request.method === 'OPTIONS') {
-    return jsonResponse(null, 204);
+  if (
+    request.method === 'OPTIONS'
+  ) {
+    return new Response(
+      null,
+      {
+        status: 204,
+        headers: getHeaders(),
+      }
+    );
   }
 
-  if (request.method !== 'GET') {
+  if (
+    request.method !== 'GET'
+  ) {
     return jsonResponse(
       {
         status: 'error',
-        message: 'Method tidak didukung.',
+        message:
+          'Method tidak didukung.',
       },
       405
     );
@@ -672,38 +1008,37 @@ async function handleExport(
       );
     }
 
-    const rawUrl =
-      request.url || '';
-
-    const requestOrigin =
-      request.headers.get('origin') ||
-      (request.headers.get('x-forwarded-proto') &&
-        request.headers.get('host')
-        ? `${request.headers.get('x-forwarded-proto')}://${request.headers.get('host')}`
-        : request.headers.get('host')
-          ? `https://${request.headers.get('host')}`
-          : 'https://sdgoekona.vercel.app');
-
     const url =
       new URL(
-        rawUrl,
-        requestOrigin
+        request.url,
+        `https://${
+          request.headers.get(
+            'host'
+          ) ||
+          'sdgoekona.vercel.app'
+        }`
       );
 
     let bulan =
-      url.searchParams.get('bulan') ||
-      '';
+      url.searchParams.get(
+        'bulan'
+      ) || '';
 
     bulan =
-      bulan.padStart(2, '0');
+      bulan.padStart(
+        2,
+        '0'
+      );
 
     const tahun =
-      url.searchParams.get('tahun') ||
-      '';
+      url.searchParams.get(
+        'tahun'
+      ) || '';
 
     const idUser =
-      url.searchParams.get('id_user') ||
-      '';
+      url.searchParams.get(
+        'id_user'
+      ) || '';
 
     if (
       !/^(0[1-9]|1[0-2])$/.test(
@@ -721,7 +1056,9 @@ async function handleExport(
     }
 
     if (
-      !/^\d{4}$/.test(tahun)
+      !/^\d{4}$/.test(
+        tahun
+      )
     ) {
       return jsonResponse(
         {
@@ -749,7 +1086,10 @@ async function handleExport(
     const endDate =
       `${nextYear}-${String(
         nextMonth
-      ).padStart(2, '0')}-01`;
+      ).padStart(
+        2,
+        '0'
+      )}-01`;
 
     const conn =
       connect({
@@ -760,7 +1100,6 @@ async function handleExport(
       SELECT
         a.id_user,
         g.nama AS name,
-
         DATE_FORMAT(
           a.tanggal,
           '%Y-%m-%d'
@@ -771,7 +1110,6 @@ async function handleExport(
             a.jam_masuk IS NOT NULL
             AND
             a.jam_pulang IS NOT NULL
-
           THEN CONCAT(
             TIME_FORMAT(
               a.jam_masuk,
@@ -786,7 +1124,6 @@ async function handleExport(
 
           WHEN
             a.jam_masuk IS NOT NULL
-
           THEN TIME_FORMAT(
             a.jam_masuk,
             '%H:%i'
@@ -794,7 +1131,6 @@ async function handleExport(
 
           WHEN
             a.jam_pulang IS NOT NULL
-
           THEN TIME_FORMAT(
             a.jam_pulang,
             '%H:%i'
@@ -821,6 +1157,7 @@ async function handleExport(
         g.nip,
         g.nik,
         g.status_kepegawaian,
+        g.pangkat,
         g.golongan_ruang,
         g.jabatan
 
@@ -835,10 +1172,11 @@ async function handleExport(
         AND a.tanggal < ?
     `;
 
-    const params: Array<string | number> = [
-      startDate,
-      endDate,
-    ];
+    const params:
+      Array<string | number> = [
+        startDate,
+        endDate,
+      ];
 
     if (idUser) {
       sql +=
@@ -856,29 +1194,62 @@ async function handleExport(
         params
       ) as any;
 
-    const rows =
+    let rows =
       (
         rawResult?.rows
           ? rawResult.rows
           : rawResult
       ) as RowData[];
 
+    if (!Array.isArray(rows)) {
+      rows = [];
+    }
+
     if (
-      !Array.isArray(rows) ||
       rows.length === 0
     ) {
       return jsonResponse(
         {
           status: 'error',
           message:
-            'Tidak ada data untuk diexport.',
+            'Tidak ada data untuk diexport pada periode yang dipilih.',
         },
         404
       );
     }
 
+    rows = rows
+      .slice()
+      .sort(
+        (a, b) => {
+          const byName =
+            String(
+              a.name || ''
+            ).localeCompare(
+              String(
+                b.name || ''
+              ),
+              'id'
+            );
+
+          if (
+            byName !== 0
+          ) {
+            return byName;
+          }
+
+          return String(
+            a.date || ''
+          ).localeCompare(
+            String(
+              b.date || ''
+            )
+          );
+        }
+      );
+
     const bytes =
-      await buildXlsx(
+      await buildExcel(
         rows,
         bulan,
         tahun
@@ -900,23 +1271,14 @@ async function handleExport(
 
     const safeId =
       idUser
-        ? String(
+        ? safeFileName(
             rows[0]?.name ||
               'Guru'
           )
-            .replace(
-              /[\\/:*?"<>|]/g,
-              '-'
-            )
-            .replace(
-              /\s+/g,
-              '_'
-            )
         : 'Semua_Guru';
 
     return fileResponse(
       bytes,
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       `Absensi_${MONTHS[bulan] || bulan}_${tahun}_${safeId}.xlsx`
     );
   } catch (error) {
