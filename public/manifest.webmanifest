@@ -1,0 +1,28 @@
+{
+  "name": "SDGOEKONA - Absensi Sekolah",
+  "short_name": "SDGOEKONA",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "id-ID",
+  "description": "Aplikasi absensi digital SD GMIT OEKONA.",
+  "categories": ["education", "productivity"],
+  "theme_color": "#1d4ed8",
+  "background_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
