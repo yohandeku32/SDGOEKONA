@@ -254,7 +254,7 @@ export default function CameraCapture({
             </p>
           </div>
           <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider font-sans ${
-            mode === 'MASUK' ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400' : 'bg-orange-100 dark:bg-orange-950/50 text-orange-700 dark:text-orange-400'
+            mode === 'MASUK' ? 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300' : 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300'
           }`}>
             {mode}
           </span>
@@ -265,7 +265,7 @@ export default function CameraCapture({
           {isProcessingPhoto ? (
             <div className="text-center py-12 space-y-5">
               <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-slate-100 dark:border-slate-800 border-t-emerald-500 rounded-full animate-spin" />
+                <div className="w-12 h-12 border-4 border-slate-100 dark:border-slate-800 border-t-blue-600 rounded-full animate-spin" />
               </div>
 
               <div>
@@ -280,8 +280,8 @@ export default function CameraCapture({
           ) : isSubmitting ? (
             <div className="text-center py-12 space-y-6">
               <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/15 animate-ping absolute" />
-                <div className="w-12 h-12 border-4 border-slate-100 dark:border-slate-800 border-t-emerald-500 rounded-full animate-spin" />
+                <div className="w-16 h-16 rounded-full bg-blue-600/15 animate-ping absolute" />
+                <div className="w-12 h-12 border-4 border-slate-100 dark:border-slate-800 border-t-blue-600 rounded-full animate-spin" />
               </div>
               <div>
                 <h4 className="font-display font-black text-slate-800 dark:text-white text-lg">Mengirim Absensi...</h4>
@@ -292,11 +292,11 @@ export default function CameraCapture({
               <div className="max-w-xs mx-auto">
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-full transition-all duration-300"
+                    className="bg-blue-600 h-full transition-all duration-300"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
-                <p className="text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold mt-2">
+                <p className="text-blue-700 dark:text-blue-300 font-mono text-xs font-bold mt-2">
                   {uploadProgress}% Berhasil Diunggah
                 </p>
               </div>
@@ -304,15 +304,15 @@ export default function CameraCapture({
           ) : photo ? (
             /* PHOTO PREVIEW */
             <div className="space-y-4">
-              <div className="relative rounded-2xl overflow-hidden bg-slate-900 border-2 border-emerald-500 aspect-video shadow-lg">
+              <div className="relative rounded-2xl overflow-hidden bg-slate-900 border-2 border-blue-600 aspect-video shadow-lg">
                 <img src={photo} alt="Preview Absensi" className="w-full h-full object-cover" />
-                <div className="absolute top-4 right-4 bg-emerald-500 text-white p-2 rounded-full shadow-lg">
+                <div className="absolute top-4 right-4 bg-blue-600 text-white p-2 rounded-full shadow-lg">
                   <Check className="w-5 h-5 stroke-[2.5]" />
                 </div>
               </div>
               {photoInfo && (
-                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 text-center">
-                  <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 font-sans">
+                <div className="rounded-xl bg-blue-50 dark:bg-emerald-950/30 px-4 py-2 text-center">
+                  <p className="text-[11px] font-bold text-blue-700 dark:text-blue-300 font-sans">
                     Foto dioptimalkan: {photoInfo}
                   </p>
                 </div>
@@ -327,7 +327,7 @@ export default function CameraCapture({
                 </button>
                 <button
                   onClick={handleSubmit}
-                  className="w-full sm:flex-1 py-4 px-5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 text-xs sm:text-sm shadow-lg shadow-emerald-500/25 font-sans cursor-pointer border-none"
+                  className="w-full sm:flex-1 py-4 px-5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 text-xs sm:text-sm shadow-lg shadow-blue-600/25 font-sans cursor-pointer border-none"
                 >
                   <Check className="w-4 h-4 shrink-0" />
                   <span>Kirim Absen Sekarang</span>
@@ -347,11 +347,11 @@ export default function CameraCapture({
               }}
               className={`border-3 border-dashed rounded-3xl p-10 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-4 ${
                 dragOver
-                  ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 scale-[1.02]'
-                  : 'border-slate-200 dark:border-slate-800 hover:border-emerald-400 hover:bg-slate-50/50 dark:hover:bg-slate-800/10'
+                  ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/20 scale-[1.02]'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-blue-400 hover:bg-slate-50/50 dark:hover:bg-slate-800/10'
               }`}
             >
-              <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 flex items-center justify-center text-emerald-500 shadow-sm">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900 flex items-center justify-center text-blue-600 shadow-sm">
                 <UploadCloud className="w-8 h-8" />
               </div>
               <div className="space-y-1">
