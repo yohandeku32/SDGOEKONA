@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS || '*')
     .split(',')
@@ -8,9 +10,12 @@ const ALLOWED_ORIGINS = new Set(
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get('Origin') || '';
 
-  const allowedOrigin = ALLOWED_ORIGINS.has(origin)
-    ? origin
-    : '';
+  const allowedOrigin =
+    ALLOWED_ORIGINS.has('*')
+      ? '*'
+      : ALLOWED_ORIGINS.has(origin)
+        ? origin
+        : '';
 
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
