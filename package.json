@@ -23,7 +23,8 @@
     "motion": "^12.23.24",
     "@tidbcloud/serverless": "^0.3.0",
     "exceljs": "^4.4.0",
-    "docx": "9.7.1"
+    "docx": "9.7.1",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
