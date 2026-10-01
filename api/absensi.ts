@@ -1631,7 +1631,59 @@ async function hapusFotoDrive(
 // UPLOAD FOTO KE GOOGLE APPS SCRIPT
 // ======================================================
 
+let driveUploadQueue: Promise<void> = Promise.resolve();
+let driveUploadLastCompletedAt = 0;
+
 async function uploadFoto(
+  appsScriptUrl: string,
+  data: {
+    id_user: string;
+    name: string;
+    date: string;
+    status: AbsenStatus;
+    photo: string;
+  }
+) {
+  const waitForPrevious = driveUploadQueue.catch(() => undefined);
+
+  let releaseQueue!: () => void;
+
+  driveUploadQueue = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
+
+  await waitForPrevious;
+
+  const MIN_SERVER_UPLOAD_GAP_MS = 1500;
+
+  const elapsed =
+    Date.now() -
+    driveUploadLastCompletedAt;
+
+  if (
+    driveUploadLastCompletedAt > 0 &&
+    elapsed < MIN_SERVER_UPLOAD_GAP_MS
+  ) {
+    await new Promise<void>((resolve) => {
+      setTimeout(
+        resolve,
+        MIN_SERVER_UPLOAD_GAP_MS - elapsed
+      );
+    });
+  }
+
+  try {
+    return await uploadFotoNow(
+      appsScriptUrl,
+      data
+    );
+  } finally {
+    driveUploadLastCompletedAt = Date.now();
+    releaseQueue();
+  }
+}
+
+async function uploadFotoNow(
   appsScriptUrl: string,
 
   data: {
