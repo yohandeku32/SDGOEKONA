@@ -15,9 +15,9 @@ export default function Loader({ text = 'Menyiapkan Data...' }: LoaderProps) {
       <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 max-w-xs w-full mx-4 border border-slate-100">
         <div className="relative flex items-center justify-center">
           {/* Inner pulse */}
-          <div className="w-12 h-12 rounded-full bg-emerald-500/10 animate-ping absolute" />
+          <div className="w-12 h-12 rounded-full bg-blue-600/10 animate-ping absolute" />
           {/* Spinning border */}
-          <div className="w-12 h-12 border-4 border-slate-100 border-t-emerald-500 rounded-full animate-spin" />
+          <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin" />
         </div>
         <div>
           <h3 className="font-display font-extrabold text-slate-800 text-lg">Sinkronisasi</h3>
