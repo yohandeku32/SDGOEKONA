@@ -10,11 +10,59 @@ import Loader from './components/Loader';
 import SuccessModal from './components/SuccessModal';
 import { API_BASE_URL } from './schoolConfig';
 
+const SESSION_STORAGE_KEY = 'sdgoekona_session_v1';
+const SESSION_DURATION_MS = 30 * 60 * 1000;
+
+type StoredSession = {
+  user: User;
+  expiresAt: number;
+};
+
+function readStoredSession(): StoredSession | null {
+  try {
+    const raw = window.localStorage.getItem(
+      SESSION_STORAGE_KEY
+    );
+
+    if (!raw) return null;
+
+    const session = JSON.parse(raw) as StoredSession;
+
+    if (
+      !session ||
+      !session.user ||
+      !session.user.id ||
+      !session.user.role ||
+      !session.expiresAt ||
+      session.expiresAt <= Date.now()
+    ) {
+      window.localStorage.removeItem(
+        SESSION_STORAGE_KEY
+      );
+      return null;
+    }
+
+    return session;
+  } catch {
+    window.localStorage.removeItem(
+      SESSION_STORAGE_KEY
+    );
+    return null;
+  }
+}
+
 // API Vercel -> TiDB
 const ABSENSI_API_URL = `${API_BASE_URL}/api/absensi`;
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] =
+    useState<User | null>(() => {
+      if (typeof window === 'undefined') {
+        return null;
+      }
+
+      return readStoredSession()?.user || null;
+    });
   const [globalDatabase, setGlobalDatabase] = useState<AttendanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loaderText, setLoaderText] = useState('Menyiapkan Data...');
@@ -27,6 +75,40 @@ export default function App() {
   // Success modal state
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Pertahankan sesi saat refresh dan otomatis keluar setelah 30 menit.
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    const stored =
+      readStoredSession();
+
+    if (!stored) {
+      setCurrentUser(null);
+      return;
+    }
+
+    const remaining =
+      Math.max(
+        0,
+        stored.expiresAt - Date.now()
+      );
+
+    const timer =
+      window.setTimeout(() => {
+        window.localStorage.removeItem(
+          SESSION_STORAGE_KEY
+        );
+        setCurrentUser(null);
+        setGlobalDatabase([]);
+      }, remaining);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [currentUser]);
 
   // Fetch database whenever currentUser exists
   useEffect(() => {
@@ -70,10 +152,26 @@ export default function App() {
   };
 
   const handleLoginSuccess = (user: User) => {
+    const session: StoredSession = {
+      user,
+      expiresAt:
+        Date.now() +
+        SESSION_DURATION_MS
+    };
+
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify(session)
+    );
+
     setCurrentUser(user);
   };
 
   const handleLogout = () => {
+    window.localStorage.removeItem(
+      SESSION_STORAGE_KEY
+    );
+
     setCurrentUser(null);
     setGlobalDatabase([]);
   };
