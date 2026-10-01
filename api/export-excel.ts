@@ -2,8 +2,6 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 import { connect } from '@tidbcloud/serverless';
-import * as ExcelJS from 'exceljs';
-
 type RowData = {
   id_user: string;
   name: string;
@@ -432,6 +430,13 @@ async function buildExcel(
   bulan: string,
   tahun: string
 ) {
+  const ExcelJSModule: any =
+    await import('exceljs');
+
+  const ExcelJS =
+    ExcelJSModule?.default ||
+    ExcelJSModule;
+
   const workbook =
     new ExcelJS.Workbook();
 
