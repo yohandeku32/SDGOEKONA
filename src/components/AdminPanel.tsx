@@ -63,6 +63,7 @@ interface GuruGroup {
   pangkat?: string | null;
   golongan_ruang?: string | null;
   jabatan?: string | null;
+  role?: string | null;
   records: AttendanceRecord[];
 }
 
@@ -83,6 +84,37 @@ const MONTHS = [
 
 
 const BATAS_TERLAMBAT = '07:15';
+
+function getDisplayEmploymentStatus(
+  role?: string | null,
+  statusKepegawaian?: string | null
+) {
+  const rawStatus = String(
+    statusKepegawaian || ''
+  ).trim();
+
+  if (rawStatus && rawStatus.toLowerCase() === 'pns') {
+    return 'PNS';
+  }
+
+  const normalizedRole = String(
+    role || ''
+  ).trim().toLowerCase();
+
+  if (normalizedRole === 'guru') {
+    return 'Guru Yayasan';
+  }
+
+  if (normalizedRole === 'pegawai') {
+    return 'Pegawai Yayasan';
+  }
+
+  if (normalizedRole === 'kepsek') {
+    return 'Kepala Sekolah Yayasan';
+  }
+
+  return rawStatus || 'Non-PNS';
+}
 
 interface MonthlyRecapRow {
   id_user: string;
@@ -659,6 +691,7 @@ export default function AdminPanel({
         pangkat: record.pangkat,
         golongan_ruang: record.golongan_ruang,
         jabatan: record.jabatan,
+        role: MASTER_USERS.find((staff) => String(staff.id) === key)?.role || record.role,
         records: [record]
       });
     });
@@ -803,7 +836,10 @@ export default function AdminPanel({
           golongan: meta?.golongan_ruang || '-',
           jabatan: meta?.jabatan || '-',
           statusKepegawaian:
-            meta?.status_kepegawaian || '-',
+            getDisplayEmploymentStatus(
+              staff.role,
+              meta?.status_kepegawaian
+            ),
           jumlahHariKerja: workDates.length,
           tanpaBerita,
           ijin,
@@ -2769,7 +2805,7 @@ export default function AdminPanel({
                                 <div>
                                   <span className="identity-label inline-block w-[72px] font-bold">Status</span>
                                   <span className="mr-1">:</span>
-                                  <span>{group.status_kepegawaian || '-'}</span>
+                                  <span>{getDisplayEmploymentStatus(group.role, group.status_kepegawaian)}</span>
                                 </div>
                                 <div>
                                   <span className="identity-label inline-block w-[72px] font-bold">Gol.Ruang</span>
