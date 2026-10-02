@@ -4,7 +4,7 @@ import { connect } from '@tidbcloud/serverless';
 import { SCHOOL_CONFIG } from './school-config';
 import { corsJson, fileResponse, xmlEscape, zipFiles } from './lib/export-utils';
 
-type GuruRow={id_user:string;nama:string;nip?:string|null;nik?:string|null;status_kepegawaian?:string|null;golongan_ruang?:string|null;jabatan?:string|null};
+type GuruRow={id_user:string;nama:string;nip?:string|null;nik?:string|null;status_kepegawaian?:string|null;role?:string|null;golongan_ruang?:string|null;jabatan?:string|null};
 type AttendanceRow={id_user:string;tanggal:string;jam_masuk?:string|null;keterangan?:string|null};
 const MONTHS:Record<string,string>={'01':'Januari','02':'Februari','03':'Maret','04':'April','05':'Mei','06':'Juni','07':'Juli','08':'Agustus','09':'September','10':'Oktober','11':'November','12':'Desember'};
 const BATAS_TERLAMBAT='07:15';
@@ -16,6 +16,16 @@ function tc(t:unknown,b=false){return `<w:tc><w:tcPr><w:tcW w:w="1050" w:type="d
 function row(c:string[]){return `<w:tr>${c.join('')}</w:tr>`;}
 function workDates(year:number,month:number,today=new Date()){const out:string[]=[];const last=new Date(year,month,0).getDate();const current=year===today.getFullYear()&&month===today.getMonth()+1;const future=year>today.getFullYear()||(year===today.getFullYear()&&month>today.getMonth()+1);if(future)return out;const end=current?Math.min(today.getDate(),last):last;for(let d=1;d<=end;d++){const x=new Date(year,month-1,d);if(x.getDay()===0)continue;out.push(`${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`);}return out;}
 function mins(v?:string|null){const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
+function displayStatus(g:GuruRow){
+  const nip=String(g.nip||'').replace(/\D/g,'');
+  if(nip && ['197001162000122002','196612312006042132','197406132008012010'].includes(nip)) return 'PNS';
+  const role=String(g.role||'').trim().toLowerCase();
+  if(role==='guru') return 'Guru Yayasan';
+  if(role==='pegawai') return 'Pegawai Yayasan';
+  if(role==='kepsek') return 'Kepala Sekolah Yayasan';
+  return String(g.status_kepegawaian||'').trim() || 'Non-PNS';
+}
+
 function category(v?:string|null){const t=String(v||'').trim().toLowerCase();if(t.includes('tanpa berita')||t.includes('alpa')||t.includes('alpha'))return 'tanpa';if(t.includes('ijin')||t.includes('izin'))return 'ijin';if(t.includes('sakit'))return 'sakit';if(t.includes('dinas luar')||t==='dl'||t.includes('dinas'))return 'dinas';return 'hadir';}
 
 function documentXml(rows:any[],bulan:string,tahun:string){
@@ -54,7 +64,7 @@ async function handleExport(request: Request) {
   
   const conn = connect({url:databaseUrl});
   
-  let gs='SELECT id_user,nama,nip,nik,status_kepegawaian,golongan_ruang,jabatan FROM guru WHERE aktif=1 AND role<>"admin"';
+  let gs='SELECT id_user,nama,nip,nik,status_kepegawaian,role,golongan_ruang,jabatan FROM guru WHERE aktif=1 AND role<>"admin"';
   const gp:string[]=[]; if(idUser){gs+=' AND id_user=?';gp.push(idUser);} gs+=' ORDER BY nama ASC';
   
   const rawGuru = await conn.execute(gs,gp) as any;
@@ -77,7 +87,7 @@ async function handleExport(request: Request) {
   const rawAtt = await conn.execute(as,ap) as any;
   const att = (rawAtt?.rows ? rawAtt.rows : rawAtt) as AttendanceRow[];
   
-  const dates=workDates(Number(tahun),Number(bulan));const dateSet=new Set(dates);const by=new Map<string,AttendanceRow[]>();for(const a of att){if(!dateSet.has(a.tanggal))continue;if(!by.has(a.id_user))by.set(a.id_user,[]);by.get(a.id_user)!.push(a);}const late=mins(BATAS_TERLAMBAT)||0;const recap=guru.map(g=>{const rec=by.get(g.id_user)||[];const day=new Map<string,string>();const lateDates=new Set<string>();for(const a of rec){const c=category(a.keterangan);day.set(a.tanggal,c);if(c==='hadir'){const m=mins(a.jam_masuk);if(m!==null&&m>late)lateDates.add(a.tanggal);}}let hadir=0,ijin=0,sakit=0,dinasLuar=0,tanpa=0;for(const c of day.values()){if(c==='hadir')hadir++;if(c==='ijin')ijin++;if(c==='sakit')sakit++;if(c==='dinas')dinasLuar++;if(c==='tanpa')tanpa++;}const tanpaAuto=Math.max(0,dates.length-(hadir+ijin+sakit+dinasLuar+tanpa));tanpa+=tanpaAuto;return{id_user:g.id_user,nama:g.nama,nipNik:g.nip||g.nik||g.id_user||'-',golongan:g.golongan_ruang||'-',jabatan:g.jabatan||'-',statusKepegawaian:g.status_kepegawaian||'-',jumlahHariKerja:dates.length,tanpaBerita:tanpa,ijin,sakit,dinasLuar,jumlahTidakHadir:tanpa+ijin+sakit+dinasLuar,terlambat:lateDates.size,jumlahHariHadir:hadir};});
+  const dates=workDates(Number(tahun),Number(bulan));const dateSet=new Set(dates);const by=new Map<string,AttendanceRow[]>();for(const a of att){if(!dateSet.has(a.tanggal))continue;if(!by.has(a.id_user))by.set(a.id_user,[]);by.get(a.id_user)!.push(a);}const late=mins(BATAS_TERLAMBAT)||0;const recap=guru.map(g=>{const rec=by.get(g.id_user)||[];const day=new Map<string,string>();const lateDates=new Set<string>();for(const a of rec){const c=category(a.keterangan);day.set(a.tanggal,c);if(c==='hadir'){const m=mins(a.jam_masuk);if(m!==null&&m>late)lateDates.add(a.tanggal);}}let hadir=0,ijin=0,sakit=0,dinasLuar=0,tanpa=0;for(const c of day.values()){if(c==='hadir')hadir++;if(c==='ijin')ijin++;if(c==='sakit')sakit++;if(c==='dinas')dinasLuar++;if(c==='tanpa')tanpa++;}const tanpaAuto=Math.max(0,dates.length-(hadir+ijin+sakit+dinasLuar+tanpa));tanpa+=tanpaAuto;return{id_user:g.id_user,nama:g.nama,nipNik:g.nip||g.nik||g.id_user||'-',golongan:g.golongan_ruang||'-',jabatan:g.jabatan||'-',statusKepegawaian:displayStatus(g),jumlahHariKerja:dates.length,tanpaBerita:tanpa,ijin,sakit,dinasLuar,jumlahTidakHadir:tanpa+ijin+sakit+dinasLuar,terlambat:lateDates.size,jumlahHariHadir:hadir};});
   
   const bytes=await buildDocx(recap,bulan,tahun);
   return fileResponse(bytes,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',`Rekap_Absensi_${MONTHS[bulan]||bulan}_${tahun}.docx`);
