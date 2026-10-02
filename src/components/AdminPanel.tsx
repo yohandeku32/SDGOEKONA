@@ -86,34 +86,18 @@ const MONTHS = [
 const BATAS_TERLAMBAT = '07:15';
 
 function getDisplayEmploymentStatus(
-  role?: string | null,
-  statusKepegawaian?: string | null
+  nip?: string | null
 ) {
-  const rawStatus = String(
-    statusKepegawaian || ''
-  ).trim();
+  const normalizedNip = String(
+    nip || ''
+  ).replace(
+    /\D/g,
+    ''
+  );
 
-  if (rawStatus && rawStatus.toLowerCase() === 'pns') {
-    return 'PNS';
-  }
-
-  const normalizedRole = String(
-    role || ''
-  ).trim().toLowerCase();
-
-  if (normalizedRole === 'guru') {
-    return 'Guru Yayasan';
-  }
-
-  if (normalizedRole === 'pegawai') {
-    return 'Pegawai Yayasan';
-  }
-
-  if (normalizedRole === 'kepsek') {
-    return 'Kepala Sekolah Yayasan';
-  }
-
-  return rawStatus || 'Non-PNS';
+  return normalizedNip
+    ? 'PNS'
+    : 'YAYASAN';
 }
 
 interface MonthlyRecapRow {
@@ -837,8 +821,7 @@ export default function AdminPanel({
           jabatan: meta?.jabatan || '-',
           statusKepegawaian:
             getDisplayEmploymentStatus(
-              staff.role,
-              meta?.status_kepegawaian
+              meta?.nip || staff.nip
             ),
           jumlahHariKerja: workDates.length,
           tanpaBerita,
@@ -2805,7 +2788,7 @@ export default function AdminPanel({
                                 <div>
                                   <span className="identity-label inline-block w-[72px] font-bold">Status</span>
                                   <span className="mr-1">:</span>
-                                  <span>{getDisplayEmploymentStatus(group.role, group.status_kepegawaian)}</span>
+                                  <span>{getDisplayEmploymentStatus(group.nip)}</span>
                                 </div>
                                 <div>
                                   <span className="identity-label inline-block w-[72px] font-bold">Gol.Ruang</span>
