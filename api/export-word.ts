@@ -898,12 +898,6 @@ function paragraph(
   </w:p>`;
 }
 
-const PNS_NIPS = new Set([
-  '197001162000122002',
-  '196612312006042132',
-  '197406132008012010',
-]);
-
 function normalizeNip(
   value?: string | null
 ) {
@@ -932,25 +926,9 @@ function identityBlock(
       group.nip
     );
 
-  const normalizedRole = String(
-    group.role || ''
-  ).trim().toLowerCase();
-
-  const normalizedStatus = String(
-    group.status_kepegawaian || ''
-  ).trim().toLowerCase();
-
-  const status =
-    normalizedStatus === 'pns' ||
-    (nip && PNS_NIPS.has(nip))
-      ? 'PNS'
-      : normalizedRole === 'guru'
-        ? 'Guru Yayasan'
-        : normalizedRole === 'pegawai'
-          ? 'Pegawai Yayasan'
-          : normalizedRole === 'kepsek'
-            ? 'Kepala Sekolah Yayasan'
-            : String(group.status_kepegawaian || '').trim() || 'Non-PNS';
+  const status = nip
+    ? 'PNS'
+    : 'YAYASAN';
 
   const items = [
     [
