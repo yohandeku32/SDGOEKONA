@@ -12,7 +12,16 @@ const BATAS_TERLAMBAT='07:15';
 function esc(v:unknown){return xmlEscape(v).replace(/\n/g,'&#xA;');}
 function trun(t:unknown,b=false,s=18){return `<w:r><w:rPr>${b?'<w:b/>':''}<w:sz w:val="${s}"/><w:szCs w:val="${s}"/><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr><w:t xml:space="preserve">${esc(t)}</w:t></w:r>`;}
 function p(t:unknown,b=false,s=18,c=false){return `<w:p><w:pPr><w:jc w:val="${c?'center':'left'}"/><w:spacing w:before="0" w:after="0"/></w:pPr>${trun(t,b,s)}</w:p>`;}
-function tc(t:unknown,b=false){return `<w:tc><w:tcPr><w:tcW w:w="1050" w:type="dxa"/><w:tcBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/></w:tcBorders><w:tcMar><w:top w:w="35" w:type="dxa"/><w:bottom w:w="35" w:type="dxa"/><w:left w:w="40" w:type="dxa"/><w:right w:w="40" w:type="dxa"/></w:tcMar></w:tcPr>${p(t,b,14,true)}</w:tc>`;}
+function tc(t: unknown, bold = false, width = 1050) {
+  return '<w:tc>' +
+    '<w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>' +
+    '<w:tcBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/>' +
+    '<w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/></w:tcBorders>' +
+    '<w:tcMar><w:top w:w="25" w:type="dxa"/><w:bottom w:w="25" w:type="dxa"/>' +
+    '<w:left w:w="25" w:type="dxa"/><w:right w:w="25" w:type="dxa"/></w:tcMar></w:tcPr>' +
+    p(t, bold, 12, true) +
+    '</w:tc>';
+}
 function row(c:string[]){return `<w:tr>${c.join('')}</w:tr>`;}
 function workDates(year:number,month:number,today=new Date()){const out:string[]=[];const last=new Date(year,month,0).getDate();const current=year===today.getFullYear()&&month===today.getMonth()+1;const future=year>today.getFullYear()||(year===today.getFullYear()&&month>today.getMonth()+1);if(future)return out;const end=current?Math.min(today.getDate(),last):last;for(let d=1;d<=end;d++){const x=new Date(year,month-1,d);if(x.getDay()===0)continue;out.push(`${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`);}return out;}
 function mins(v?:string|null){const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
