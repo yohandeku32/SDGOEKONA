@@ -821,7 +821,10 @@ export default function AdminPanel({
           jabatan: meta?.jabatan || '-',
           statusKepegawaian:
             getDisplayEmploymentStatus(
-              meta?.nip || staff.nip
+              meta?.nip ||
+                (/^\d{18}$/.test(String(staff.id).trim())
+                  ? staff.id
+                  : null)
             ),
           jumlahHariKerja: workDates.length,
           tanpaBerita,
