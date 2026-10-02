@@ -1483,28 +1483,41 @@ export default function AdminPanel({
       return;
     }
 
+    const printYear = Number(selectedYear);
+    const printMonth = Number(selectedMonth);
+    const printLastDay = new Date(printYear, printMonth, 0).getDate();
+    const printCalendarDays = Array.from({ length: printLastDay }, (_, index) => index + 1);
+
     const rowsHtml = monthlyRecap
-      .map(
-        (row, index) => `
-          <tr>
-            <td>${index + 1}</td>
-            <td class="left">${escapeHtml(row.nama)}</td>
-            <td>${escapeHtml(row.nipNik)}</td>
-            <td>${escapeHtml(row.golongan)}</td>
-            <td class="left">${escapeHtml(row.jabatan)}</td>
-            <td>${escapeHtml(row.statusKepegawaian)}</td>
-            <td>${row.jumlahHariKerja}</td>
-            <td>${row.tanpaBerita}</td>
-            <td>${row.ijin}</td>
-            <td>${row.sakit}</td>
-            <td>${row.dinasLuar}</td>
-            <td>${row.jumlahTidakHadir}</td>
-            <td>${row.terlambat}</td>
-            <td>${row.jumlahHariHadir}</td>
-            <td>${escapeHtml(row.keterangan)}</td>
-          </tr>
-        `
-      )
+      .map((row, index) => {
+        const dailyHtml = printCalendarDays
+          .map((day) => {
+            const dateKey = selectedYear + '-' + selectedMonth + '-' + String(day).padStart(2, '0');
+            const date = new Date(printYear, printMonth - 1, day);
+            const isSunday = date.getDay() === 0;
+            return '<td class="day ' + (isSunday ? 'sunday' : '') + '">' +
+              escapeHtml(row.daily[dateKey] || '') +
+              '</td>';
+          })
+          .join('');
+
+        return '<tr>' +
+          '<td>' + (index + 1) + '</td>' +
+          '<td class="left">' + escapeHtml(row.nama) + '</td>' +
+          '<td>' + escapeHtml(row.nipNik) + '</td>' +
+          '<td>' + escapeHtml(row.jabatan) + '</td>' +
+          '<td>' + escapeHtml(row.pangkat) + '</td>' +
+          '<td>' + escapeHtml(row.golongan) + '</td>' +
+          dailyHtml +
+          '<td>' + row.hadir + '</td>' +
+          '<td>' + row.ijin + '</td>' +
+          '<td>' + row.sakit + '</td>' +
+          '<td>' + row.cuti + '</td>' +
+          '<td>' + row.tugasDinas + '</td>' +
+          '<td>' + row.tanpaBerita + '</td>' +
+          '<td>' + row.tugasBelajar + '</td>' +
+          '</tr>';
+      })
       .join('');
 
     const kopLogoKabupatenPrint =
@@ -1529,8 +1542,8 @@ export default function AdminPanel({
           <title>Rekap Absensi ${escapeHtml(selectedMonthLabel)} ${escapeHtml(selectedYear)}</title>
           <style>
             @page {
-              size: A4 landscape;
-              margin: 6mm;
+              size: A3 landscape;
+              margin: 5mm;
             }
 
             * {
@@ -1544,6 +1557,26 @@ export default function AdminPanel({
               background: #fff;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+            }
+
+            .simple-header {
+              display: grid;
+              grid-template-columns: 1fr auto 1fr;
+              align-items: center;
+              margin-bottom: 2mm;
+            }
+
+            .simple-header .unit {
+              font-size: 9pt;
+              font-weight: 700;
+              text-align: left;
+            }
+
+            .simple-header h1 {
+              margin: 0;
+              font-size: 10.5pt;
+              font-weight: 700;
+              text-align: center;
             }
 
             .kop {
@@ -1624,10 +1657,10 @@ export default function AdminPanel({
             th,
             td {
               border: 1px solid #000;
-              padding: 1.5mm 1mm;
+              padding: 1mm 0.7mm;
               text-align: center;
               vertical-align: middle;
-              font-size: 6.8pt;
+              font-size: 5.2pt;
               line-height: 1.15;
               overflow-wrap: anywhere;
             }
@@ -1638,6 +1671,19 @@ export default function AdminPanel({
 
             td.left {
               text-align: left;
+            }
+
+            th.day,
+            td.day {
+              width: 5.5mm;
+              min-width: 5.5mm;
+              padding-left: 0.3mm;
+              padding-right: 0.3mm;
+            }
+
+            td.sunday,
+            th.sunday {
+              background: #d1d1d1;
             }
 
             tr {
@@ -1678,65 +1724,42 @@ export default function AdminPanel({
         </head>
 
         <body>
-          <div class="kop">
-            <div class="kop-logo">
-              <img
-                src="${kopLogoKabupatenPrint}"
-                alt="Logo Kabupaten Kupang"
-              />
+          <div class="simple-header">
+            <div class="unit">
+              UNIT KERJA : ${escapeHtml(SCHOOL_CONFIG.schoolName)}
             </div>
-
-            <div class="kop-text">
-              <div class="kop-line-1">
-                ${SCHOOL_CONFIG.government}
-              </div>
-              <div class="kop-line-2">
-                ${SCHOOL_CONFIG.department}
-              </div>
-              <div class="kop-school">
-                ${SCHOOL_CONFIG.schoolName}
-              </div>
-              <div class="kop-address">
-                ${SCHOOL_CONFIG.address}
-              </div>
-            </div>
-
-            <div class="kop-logo">
-              <img
-                src="${kopLogoTutWuriPrint}"
-                alt="Logo Tut Wuri Handayani"
-              />
-            </div>
-          </div>
-
-          <h1>REKAPITULASI ABSENSI GURU DAN PEGAWAI</h1>
-
-          <div class="period">
-            BULAN ${escapeHtml(selectedMonthLabel)} ${escapeHtml(selectedYear)}
+            <h1>
+              REKAPAN ABSENSI BULAN ${escapeHtml(selectedMonthLabel).toUpperCase()} ${escapeHtml(selectedYear)}
+            </h1>
+            <div></div>
           </div>
 
           <table>
             <thead>
               <tr>
-                <th rowspan="2">No.</th>
+                <th rowspan="2">NO</th>
                 <th rowspan="2">NAMA</th>
-                <th rowspan="2">NIP / NIK</th>
-                <th rowspan="2">PANGKAT / GOL</th>
+                <th rowspan="2">NIP</th>
                 <th rowspan="2">JABATAN</th>
-                <th rowspan="2">STATUS</th>
-                <th rowspan="2">JUMLAH<br>HARI KERJA</th>
-                <th colspan="6">KETERANGAN</th>
-                <th rowspan="2">JUMLAH<br>HARI HADIR</th>
-                <th rowspan="2">KETERANGAN</th>
+                <th rowspan="2">PANGKAT</th>
+                <th rowspan="2">GOL</th>
+                <th colspan="${printCalendarDays.length}">TANGGAL</th>
+                <th colspan="7">REKAPAN</th>
               </tr>
 
               <tr>
-                <th>TANPA<br>BERITA</th>
-                <th>IJIN</th>
-                <th>SAKIT</th>
-                <th>DINAS<br>LUAR</th>
-                <th>JUMLAH</th>
-                <th>TERLAMBAT</th>
+                ${printCalendarDays.map((day) => {
+                  const date = new Date(printYear, printMonth - 1, day);
+                  const isSunday = date.getDay() === 0;
+                  return '<th class="day ' + (isSunday ? 'sunday' : '') + '">' + day + '</th>';
+                }).join('')}
+                <th>HADIR<br>(H)</th>
+                <th>IJIN<br>(I)</th>
+                <th>SAKIT<br>(S)</th>
+                <th>CUTI<br>(C)</th>
+                <th>TUGAS<br>DINAS<br>(TD)</th>
+                <th>TANPA<br>BERITA<br>(TB)</th>
+                <th>TUGAS<br>BELAJAR<br>(TS)</th>
               </tr>
             </thead>
 
