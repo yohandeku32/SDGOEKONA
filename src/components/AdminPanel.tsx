@@ -2628,49 +2628,19 @@ export default function AdminPanel({
             </p>
           </div>
 
-          <div className="mx-4 mt-4 border-b-4 border-double border-slate-900 px-3 pb-4">
-            <div className="grid grid-cols-[88px_minmax(0,1fr)_88px] items-center gap-3 sm:grid-cols-[105px_minmax(0,1fr)_105px]">
-              <div className="flex items-center justify-center">
-                <img
-                  src={KOP_LOGO_KABUPATEN}
-                  alt="Logo Kabupaten Kupang"
-                  className="h-20 w-20 object-contain sm:h-24 sm:w-24"
-                />
+          <div className="mx-4 mt-4 border-b border-slate-900 px-3 pb-3">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+              <div className="text-left text-sm font-black tracking-wide text-slate-900">
+                UNIT KERJA : {SCHOOL_CONFIG.schoolName}
               </div>
-
-              <div className="text-center font-serif text-slate-950">
-                <div className="text-[11px] font-bold leading-tight sm:text-base">
-                  {SCHOOL_CONFIG.government}
-                </div>
-                <div className="mt-1 text-[10px] font-bold leading-tight sm:text-[15px]">
-                  {SCHOOL_CONFIG.department}
-                </div>
-                <div className="mt-1 text-sm font-black leading-tight sm:text-lg">
-                  {SCHOOL_CONFIG.schoolName}
-                </div>
-                <div className="mt-1 text-[9px] font-semibold italic leading-tight sm:text-xs">
-                  {SCHOOL_CONFIG.address}
-                </div>
+              <div className="text-center text-sm font-black tracking-wide text-slate-900">
+                REKAPAN ABSENSI BULAN {selectedMonthLabel.toUpperCase()} {selectedYear}
               </div>
-
-              <div className="flex items-center justify-center">
-                <img
-                  src={KOP_LOGO_TUT_WURI}
-                  alt="Logo Tut Wuri Handayani"
-                  className="h-20 w-20 object-contain sm:h-24 sm:w-24"
-                />
-              </div>
+              <div />
             </div>
           </div>
 
-          <div className="px-4 pb-3 pt-4 text-center">
-            <h4 className="font-serif text-base font-black text-slate-950 sm:text-lg">
-              REKAPITULASI ABSENSI GURU DAN PEGAWAI
-            </h4>
-            <p className="mt-1 font-serif text-xs font-bold uppercase text-slate-700">
-              Bulan {selectedMonthLabel} {selectedYear}
-            </p>
-          </div>
+
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1750px] border-collapse font-sans text-[11px]">
