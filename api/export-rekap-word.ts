@@ -16,10 +16,6 @@ function tc(t:unknown,b=false){return `<w:tc><w:tcPr><w:tcW w:w="1050" w:type="d
 function row(c:string[]){return `<w:tr>${c.join('')}</w:tr>`;}
 function workDates(year:number,month:number,today=new Date()){const out:string[]=[];const last=new Date(year,month,0).getDate();const current=year===today.getFullYear()&&month===today.getMonth()+1;const future=year>today.getFullYear()||(year===today.getFullYear()&&month>today.getMonth()+1);if(future)return out;const end=current?Math.min(today.getDate(),last):last;for(let d=1;d<=end;d++){const x=new Date(year,month-1,d);if(x.getDay()===0)continue;out.push(`${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`);}return out;}
 function mins(v?:string|null){const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
-function displayStatus(g:GuruRow){
-  const nip=String(g.nip||'').replace(/\D/g,'');
-  return nip ? 'PNS' : 'YAYASAN';
-}
 
 function category(v?: string | null) {
   const t = String(v || '').trim().toLowerCase();
@@ -67,7 +63,6 @@ function displayStatus(g: GuruRow) {
   const nip = String(g.nip || '').replace(/\D/g, '');
   return nip ? 'PNS' : 'YAYASAN';
 }
-function category(v?:string|null){const t=String(v||'').trim().toLowerCase();if(t.includes('tanpa berita')||t.includes('alpa')||t.includes('alpha'))return 'tanpa';if(t.includes('ijin')||t.includes('izin'))return 'ijin';if(t.includes('sakit'))return 'sakit';if(t.includes('dinas luar')||t==='dl'||t.includes('dinas'))return 'dinas';return 'hadir';}
 
 function tc(t: unknown, bold = false, width = 700) {
   return '<w:tc>' +
