@@ -104,18 +104,18 @@ interface MonthlyRecapRow {
   id_user: string;
   nama: string;
   nipNik: string;
-  golongan: string;
   jabatan: string;
+  pangkat: string;
+  golongan: string;
   statusKepegawaian: string;
-  jumlahHariKerja: number;
-  tanpaBerita: number;
+  daily: Record<string, string>;
+  hadir: number;
   ijin: number;
   sakit: number;
-  dinasLuar: number;
-  jumlahTidakHadir: number;
-  terlambat: number;
-  jumlahHariHadir: number;
-  keterangan: string;
+  cuti: number;
+  tugasDinas: number;
+  tanpaBerita: number;
+  tugasBelajar: number;
 }
 
 function parseTimeToMinutes(value?: string | null) {
@@ -182,6 +182,7 @@ function getRecordCategory(record: AttendanceRecord) {
     .toLowerCase();
 
   if (
+    text === 'tb' ||
     text.includes('tanpa berita') ||
     text.includes('alpa') ||
     text.includes('alpha')
@@ -189,20 +190,29 @@ function getRecordCategory(record: AttendanceRecord) {
     return 'tanpaBerita' as const;
   }
 
-  if (text.includes('ijin') || text.includes('izin')) {
-    return 'ijin' as const;
-  }
-
-  if (text.includes('sakit')) {
-    return 'sakit' as const;
+  if (text === 'ts' || text.includes('tugas belajar')) {
+    return 'tugasBelajar' as const;
   }
 
   if (
+    text === 'td' ||
+    text.includes('tugas dinas') ||
     text.includes('dinas luar') ||
-    text === 'dl' ||
     text.includes('dinas')
   ) {
-    return 'dinasLuar' as const;
+    return 'tugasDinas' as const;
+  }
+
+  if (text === 'c' || text.includes('cuti')) {
+    return 'cuti' as const;
+  }
+
+  if (text === 'i' || text.includes('ijin') || text.includes('izin')) {
+    return 'ijin' as const;
+  }
+
+  if (text === 's' || text.includes('sakit')) {
+    return 'sakit' as const;
   }
 
   return 'hadir' as const;
@@ -698,15 +708,20 @@ export default function AdminPanel({
   const monthlyRecap = useMemo<MonthlyRecapRow[]>(() => {
     const year = Number(selectedYear);
     const month = Number(selectedMonth);
-
     const workDates = getWorkDatesMondayToSaturday(year, month);
     const workDateSet = new Set(workDates);
-    const monthPrefix = `${selectedYear}-${selectedMonth}`;
-    const lateLimit = parseTimeToMinutes(BATAS_TERLAMBAT) ?? 0;
+    const lastDay = new Date(year, month, 0).getDate();
+    const today = new Date();
+    const isCurrentMonth =
+      year === today.getFullYear() &&
+      month === today.getMonth() + 1;
+    const isFutureMonth =
+      year > today.getFullYear() ||
+      (year === today.getFullYear() && month > today.getMonth() + 1);
+    const monthPrefix = selectedYear + '-' + selectedMonth;
     const query = searchQuery.trim().toLowerCase();
 
     const metadataMap = new Map<string, AttendanceRecord>();
-
     [...database]
       .sort((a, b) => String(a.date).localeCompare(String(b.date)))
       .forEach((record) => {
@@ -715,12 +730,8 @@ export default function AdminPanel({
 
     return staffList
       .filter((staff) => {
-        if (selectedGuru && staff.id !== selectedGuru) {
-          return false;
-        }
-
+        if (selectedGuru && staff.id !== selectedGuru) return false;
         const meta = metadataMap.get(staff.id);
-
         const searchable = [
           meta?.name || staff.name,
           staff.id,
@@ -728,17 +739,16 @@ export default function AdminPanel({
           meta?.nik,
           meta?.jabatan,
           meta?.status_kepegawaian,
-          meta?.golongan_ruang
+          meta?.golongan_ruang,
+          meta?.pangkat
         ]
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
-
         return query ? searchable.includes(query) : true;
       })
       .map((staff) => {
         const meta = metadataMap.get(staff.id);
-
         const records = database
           .filter(
             (record) =>
@@ -746,95 +756,96 @@ export default function AdminPanel({
               String(record.date).startsWith(monthPrefix) &&
               workDateSet.has(String(record.date))
           )
-          .sort((a, b) =>
-            String(a.date).localeCompare(String(b.date))
-          );
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
-        const dayCategory = new Map<
-          string,
-          ReturnType<typeof getRecordCategory>
-        >();
-
-        const lateDates = new Set<string>();
-
+        const dayCategory = new Map<string, ReturnType<typeof getRecordCategory>>();
         records.forEach((record) => {
-          const date = String(record.date);
-          const category = getRecordCategory(record);
-
-          dayCategory.set(date, category);
-
-          if (category === 'hadir') {
-            const masukMinutes = parseTimeToMinutes(
-              getJam(record).masuk
-            );
-
-            if (
-              masukMinutes !== null &&
-              masukMinutes > lateLimit
-            ) {
-              lateDates.add(date);
-            }
-          }
+          dayCategory.set(String(record.date), getRecordCategory(record));
         });
 
         let hadir = 0;
         let ijin = 0;
         let sakit = 0;
-        let dinasLuar = 0;
-        let explicitTanpaBerita = 0;
+        let cuti = 0;
+        let tugasDinas = 0;
+        let tanpaBerita = 0;
+        let tugasBelajar = 0;
 
         dayCategory.forEach((category) => {
           if (category === 'hadir') hadir++;
           if (category === 'ijin') ijin++;
           if (category === 'sakit') sakit++;
-          if (category === 'dinasLuar') dinasLuar++;
-          if (category === 'tanpaBerita') explicitTanpaBerita++;
+          if (category === 'cuti') cuti++;
+          if (category === 'tugasDinas') tugasDinas++;
+          if (category === 'tanpaBerita') tanpaBerita++;
+          if (category === 'tugasBelajar') tugasBelajar++;
         });
 
-        const accounted =
-          hadir +
-          ijin +
-          sakit +
-          dinasLuar +
-          explicitTanpaBerita;
-
-        const automaticTanpaBerita = Math.max(
+        tanpaBerita += Math.max(
           0,
-          workDates.length - accounted
+          workDates.length -
+            (hadir + ijin + sakit + cuti + tugasDinas + tanpaBerita + tugasBelajar)
         );
 
-        const tanpaBerita =
-          explicitTanpaBerita + automaticTanpaBerita;
+        const normalizedNip = String(
+          meta?.nip ||
+            (/^\d{18}$/.test(String(staff.id).trim()) ? staff.id : '')
+        )
+          .replace(/\D/g, '')
+          .trim();
+        const displayStatus = getDisplayEmploymentStatus(normalizedNip);
+        const daily: Record<string, string> = {};
 
-        const jumlahTidakHadir =
-          tanpaBerita + ijin + sakit + dinasLuar;
+        for (let day = 1; day <= lastDay; day++) {
+          const dateKey =
+            selectedYear + '-' +
+            selectedMonth + '-' +
+            String(day).padStart(2, '0');
+          const currentDate = new Date(year, month - 1, day);
+          const isSunday = currentDate.getDay() === 0;
+          const isPastOrToday =
+            !isFutureMonth &&
+            (!isCurrentMonth || day <= today.getDate());
+
+          if (isSunday) {
+            daily[dateKey] = '-';
+          } else if (!isPastOrToday) {
+            daily[dateKey] = '';
+          } else {
+            const category = dayCategory.get(dateKey);
+            daily[dateKey] =
+              category === 'hadir'
+                ? 'H'
+                : category === 'ijin'
+                  ? 'I'
+                  : category === 'sakit'
+                    ? 'S'
+                    : category === 'cuti'
+                      ? 'C'
+                      : category === 'tugasDinas'
+                        ? 'TD'
+                        : category === 'tugasBelajar'
+                          ? 'TS'
+                          : 'TB';
+          }
+        }
 
         return {
           id_user: staff.id,
           nama: meta?.name || staff.name,
-          nipNik:
-            meta?.nip ||
-            meta?.nik ||
-            staff.id ||
-            '-',
-          golongan: meta?.golongan_ruang || '-',
+          nipNik: normalizedNip,
           jabatan: meta?.jabatan || '-',
-          statusKepegawaian:
-            getDisplayEmploymentStatus(
-              meta?.nip ||
-                (/^\d{18}$/.test(String(staff.id).trim())
-                  ? staff.id
-                  : null)
-            ),
-          jumlahHariKerja: workDates.length,
-          tanpaBerita,
+          pangkat: displayStatus,
+          golongan: meta?.golongan_ruang || '-',
+          statusKepegawaian: displayStatus,
+          daily,
+          hadir,
           ijin,
           sakit,
-          dinasLuar,
-          jumlahTidakHadir,
-          terlambat: lateDates.size,
-          jumlahHariHadir: hadir,
-          keterangan: '-'
+          cuti,
+          tugasDinas,
+          tanpaBerita,
+          tugasBelajar
         };
       });
   }, [
@@ -845,7 +856,6 @@ export default function AdminPanel({
     selectedYear,
     staffList
   ]);
-
   const selectedMonthLabel =
     MONTHS.find((month) => month.value === selectedMonth)?.label || '';
 
@@ -2640,49 +2650,63 @@ export default function AdminPanel({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1500px] border-collapse font-sans text-xs">
+            <table className="w-full min-w-[1750px] border-collapse font-sans text-[11px]">
               <thead>
-                <tr className="bg-slate-50 text-slate-700">
-                  <th rowSpan={2} className="border border-slate-200 px-2 py-3">No.</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">Nama</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">NIP / NIK</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">Pangkat/Gol</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">Jabatan</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">Status</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">Jumlah Hari Kerja</th>
-                  <th colSpan={6} className="border border-slate-200 px-3 py-2">Keterangan</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">Jumlah Hari Hadir</th>
-                  <th rowSpan={2} className="border border-slate-200 px-3 py-3">Keterangan</th>
+                <tr className="bg-white text-slate-900">
+                  <th rowSpan={2} className="border border-slate-900 px-2 py-2 text-center">NO</th>
+                  <th rowSpan={2} className="border border-slate-900 px-3 py-2 text-center">NAMA</th>
+                  <th rowSpan={2} className="border border-slate-900 px-3 py-2 text-center">NIP</th>
+                  <th rowSpan={2} className="border border-slate-900 px-3 py-2 text-center">JABATAN</th>
+                  <th rowSpan={2} className="border border-slate-900 px-3 py-2 text-center">PANGKAT</th>
+                  <th rowSpan={2} className="border border-slate-900 px-3 py-2 text-center">GOL</th>
+                  <th colSpan={new Date(Number(selectedYear), Number(selectedMonth), 0).getDate()} className="border border-slate-900 px-3 py-2 text-center">TANGGAL</th>
+                  <th colSpan={7} className="border border-slate-900 px-3 py-2 text-center">REKAPAN</th>
                 </tr>
-
-                <tr className="bg-slate-50 text-slate-700">
-                  <th className="border border-slate-200 px-2 py-2">Tanpa Berita</th>
-                  <th className="border border-slate-200 px-2 py-2">Ijin</th>
-                  <th className="border border-slate-200 px-2 py-2">Sakit</th>
-                  <th className="border border-slate-200 px-2 py-2">Dinas Luar</th>
-                  <th className="border border-slate-200 px-2 py-2">Jumlah</th>
-                  <th className="border border-slate-200 px-2 py-2">Terlambat</th>
+                <tr className="bg-white text-slate-900">
+                  {Array.from({ length: new Date(Number(selectedYear), Number(selectedMonth), 0).getDate() }, (_, index) => index + 1).map((day) => {
+                    const date = new Date(Number(selectedYear), Number(selectedMonth) - 1, day);
+                    const isSunday = date.getDay() === 0;
+                    return (
+                      <th key={day} className={'border border-slate-900 px-1 py-2 text-center ' + (isSunday ? 'bg-slate-300' : '')}>
+                        {day}
+                      </th>
+                    );
+                  })}
+                  <th className="border border-slate-900 px-2 py-2 text-center">HADIR<br />(H)</th>
+                  <th className="border border-slate-900 px-2 py-2 text-center">IJIN<br />(I)</th>
+                  <th className="border border-slate-900 px-2 py-2 text-center">SAKIT<br />(S)</th>
+                  <th className="border border-slate-900 px-2 py-2 text-center">CUTI<br />(C)</th>
+                  <th className="border border-slate-900 px-2 py-2 text-center">TUGAS DINAS<br />(TD)</th>
+                  <th className="border border-slate-900 px-2 py-2 text-center">TANPA BERITA<br />(TB)</th>
+                  <th className="border border-slate-900 px-2 py-2 text-center">TUGAS BELAJAR<br />(TS)</th>
                 </tr>
               </thead>
-
               <tbody>
                 {monthlyRecap.map((row, index) => (
-                  <tr key={row.id_user} className="text-slate-700">
-                    <td className="border border-slate-200 px-2 py-3 text-center">{index + 1}</td>
-                    <td className="border border-slate-200 px-3 py-3 font-bold text-slate-900">{row.nama}</td>
-                    <td className="border border-slate-200 px-3 py-3 text-center">{row.nipNik}</td>
-                    <td className="border border-slate-200 px-3 py-3 text-center">{row.golongan}</td>
-                    <td className="border border-slate-200 px-3 py-3">{row.jabatan}</td>
-                    <td className="border border-slate-200 px-3 py-3 text-center">{row.statusKepegawaian}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center font-bold">{row.jumlahHariKerja}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center">{row.tanpaBerita}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center">{row.ijin}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center">{row.sakit}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center">{row.dinasLuar}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center font-bold">{row.jumlahTidakHadir}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center">{row.terlambat}</td>
-                    <td className="border border-slate-200 px-2 py-3 text-center font-bold text-emerald-700">{row.jumlahHariHadir}</td>
-                    <td className="border border-slate-200 px-3 py-3 text-center">{row.keterangan}</td>
+                  <tr key={row.id_user} className="text-slate-900">
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{index + 1}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 font-semibold whitespace-nowrap">{row.nama}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-center whitespace-nowrap">{row.nipNik}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-center whitespace-nowrap">{row.jabatan}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-center">{row.pangkat}</td>
+                    <td className="border border-slate-900 px-3 py-1.5 text-center">{row.golongan}</td>
+                    {Array.from({ length: new Date(Number(selectedYear), Number(selectedMonth), 0).getDate() }, (_, index) => index + 1).map((day) => {
+                      const date = new Date(Number(selectedYear), Number(selectedMonth) - 1, day);
+                      const isSunday = date.getDay() === 0;
+                      const dateKey = selectedYear + '-' + selectedMonth + '-' + String(day).padStart(2, '0');
+                      return (
+                        <td key={dateKey} className={'border border-slate-900 px-1 py-1.5 text-center font-semibold ' + (isSunday ? 'bg-slate-300' : '')}>
+                          {row.daily[dateKey] || ''}
+                        </td>
+                      );
+                    })}
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{row.hadir}</td>
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{row.ijin}</td>
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{row.sakit}</td>
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{row.cuti}</td>
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{row.tugasDinas}</td>
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{row.tanpaBerita}</td>
+                    <td className="border border-slate-900 px-2 py-1.5 text-center">{row.tugasBelajar}</td>
                   </tr>
                 ))}
               </tbody>
