@@ -18,7 +18,8 @@ function workDates(year:number,month:number,today=new Date()){const out:string[]
 function mins(v?:string|null){const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
 function displayStatus(g:GuruRow){
   const nip=String(g.nip||'').replace(/\D/g,'');
-  if(nip && ['197001162000122002','196612312006042132','197406132008012010'].includes(nip)) return 'PNS';
+  const rawStatus=String(g.status_kepegawaian||'').trim().toLowerCase();
+  if(rawStatus==='pns' || (nip && ['197001162000122002','196612312006042132','197406132008012010'].includes(nip))) return 'PNS';
   const role=String(g.role||'').trim().toLowerCase();
   if(role==='guru') return 'Guru Yayasan';
   if(role==='pegawai') return 'Pegawai Yayasan';
