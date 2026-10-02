@@ -17,6 +17,7 @@ type RowData = {
   nip?: string | null;
   nik?: string | null;
   status_kepegawaian?: string | null;
+  role?: string | null;
   pangkat?: string | null;
   golongan_ruang?: string | null;
   jabatan?: string | null;
@@ -921,6 +922,7 @@ function identityBlock(
     nip?: string | null;
     nik?: string | null;
     status_kepegawaian?: string | null;
+    role?: string | null;
     golongan_ruang?: string | null;
     jabatan?: string | null;
   }
@@ -930,11 +932,21 @@ function identityBlock(
       group.nip
     );
 
+  const normalizedRole = String(
+    group.role || ''
+  ).trim().toLowerCase();
+
   const status =
     nip &&
     PNS_NIPS.has(nip)
       ? 'PNS'
-      : '';
+      : normalizedRole === 'guru'
+        ? 'Guru Yayasan'
+        : normalizedRole === 'pegawai'
+          ? 'Pegawai Yayasan'
+          : normalizedRole === 'kepsek'
+            ? 'Kepala Sekolah Yayasan'
+            : String(group.status_kepegawaian || '').trim() || 'Non-PNS';
 
   const items = [
     [
@@ -2018,6 +2030,7 @@ async function handleExport(
         g.nip,
         g.nik,
         g.status_kepegawaian,
+        g.role,
         g.pangkat,
         g.golongan_ruang,
         g.jabatan
@@ -2088,6 +2101,7 @@ async function handleExport(
           nip?: string | null;
           nik?: string | null;
           status_kepegawaian?: string | null;
+          role?: string | null;
           golongan_ruang?: string | null;
           jabatan?: string | null;
           records: RowData[];
@@ -2127,6 +2141,8 @@ async function handleExport(
               record.nik,
             status_kepegawaian:
               record.status_kepegawaian,
+            role:
+              record.role,
             golongan_ruang:
               record.golongan_ruang,
             jabatan:
