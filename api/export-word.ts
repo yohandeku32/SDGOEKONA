@@ -936,9 +936,13 @@ function identityBlock(
     group.role || ''
   ).trim().toLowerCase();
 
+  const normalizedStatus = String(
+    group.status_kepegawaian || ''
+  ).trim().toLowerCase();
+
   const status =
-    nip &&
-    PNS_NIPS.has(nip)
+    normalizedStatus === 'pns' ||
+    (nip && PNS_NIPS.has(nip))
       ? 'PNS'
       : normalizedRole === 'guru'
         ? 'Guru Yayasan'
