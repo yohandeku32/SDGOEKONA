@@ -64,16 +64,6 @@ function displayStatus(g: GuruRow) {
   return nip ? 'PNS' : 'YAYASAN';
 }
 
-function tc(t: unknown, bold = false, width = 700) {
-  return '<w:tc>' +
-    '<w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>' +
-    '<w:tcBorders>' +
-    '<w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/>' +
-    '<w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/>' +
-    '</w:tcBorders></w:tcPr>' +
-    p(t, bold, 12, true) +
-    '</w:tc>';
-}
 
 function documentXml(rows: any[], bulan: string, tahun: string) {
   const year = Number(tahun);
