@@ -18,13 +18,7 @@ function workDates(year:number,month:number,today=new Date()){const out:string[]
 function mins(v?:string|null){const m=String(v||'').match(/^(\d{1,2}):(\d{2})/);return m?Number(m[1])*60+Number(m[2]):null;}
 function displayStatus(g:GuruRow){
   const nip=String(g.nip||'').replace(/\D/g,'');
-  const rawStatus=String(g.status_kepegawaian||'').trim().toLowerCase();
-  if(rawStatus==='pns' || (nip && ['197001162000122002','196612312006042132','197406132008012010'].includes(nip))) return 'PNS';
-  const role=String(g.role||'').trim().toLowerCase();
-  if(role==='guru') return 'Guru Yayasan';
-  if(role==='pegawai') return 'Pegawai Yayasan';
-  if(role==='kepsek') return 'Kepala Sekolah Yayasan';
-  return String(g.status_kepegawaian||'').trim() || 'Non-PNS';
+  return nip ? 'PNS' : 'YAYASAN';
 }
 
 function category(v?:string|null){const t=String(v||'').trim().toLowerCase();if(t.includes('tanpa berita')||t.includes('alpa')||t.includes('alpha'))return 'tanpa';if(t.includes('ijin')||t.includes('izin'))return 'ijin';if(t.includes('sakit'))return 'sakit';if(t.includes('dinas luar')||t==='dl'||t.includes('dinas'))return 'dinas';return 'hadir';}
